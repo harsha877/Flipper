@@ -289,6 +289,26 @@ export default function App() {
     setProject((prev) => ({ ...prev, scenes: nextScenes }));
   };
 
+  const parseApiJson = async (response: Response) => {
+    const rawText = await response.text();
+    const trimmed = rawText.trim();
+    if (
+      trimmed.toLowerCase().startsWith('<!doctype') ||
+      trimmed.toLowerCase().startsWith('<html')
+    ) {
+      throw new Error(
+        'The backend API returned HTML instead of JSON. If running locally, make sure your package.json "dev" script is set to "tsx server.ts" (not "vite") and restart with `npm run dev`.'
+      );
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      throw new Error(
+        `Unexpected server response (HTTP ${response.status}). Please retry in a moment.`
+      );
+    }
+  };
+
   const handleGenerateProject = async (
     prompt: string,
     sceneCount: number,
@@ -302,7 +322,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, sceneCount, visualStyle }),
       });
-      const data = await response.json();
+      const data = await parseApiJson(response);
       if (!response.ok || !data.project) {
         throw new Error(
           data.error || 'Failed to generate 24 FPS storyboard from prompt.'
@@ -340,7 +360,7 @@ export default function App() {
           scenePrompt: directionPrompt,
         }),
       });
-      const data = await response.json();
+      const data = await parseApiJson(response);
       if (!response.ok || !data.scene) {
         throw new Error(data.error || 'Failed to regenerate scene.');
       }

@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -13,9 +13,9 @@ app.use(express.json({ limit: "10mb" }));
 
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
     throw new Error(
-      "GEMINI_API_KEY is not configured. Please check the Settings > Secrets panel."
+      "GEMINI_API_KEY is not configured. Please set GEMINI_API_KEY in your .env file or the Settings > Secrets panel."
     );
   }
   return new GoogleGenAI({
@@ -26,6 +26,66 @@ function getGeminiClient() {
       },
     },
   });
+}
+
+const MODEL_FALLBACK_CHAIN = [
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
+  "gemini-3.1-flash-lite",
+];
+
+async function generateWithFallback(
+  ai: GoogleGenAI,
+  contents: string,
+  systemInstruction: string,
+  responseSchema: any
+) {
+  let lastError: any = null;
+
+  for (const modelName of MODEL_FALLBACK_CHAIN) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const config: any = {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema,
+        };
+
+        if (modelName === "gemini-3.8-flash") {
+          config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+        }
+
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents,
+          config,
+        });
+
+        if (response.text) {
+          return response.text;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || err?.code;
+        const msg = String(err?.message || "");
+        const isTransient =
+          status === 503 ||
+          status === 429 ||
+          msg.includes("503") ||
+          msg.includes("UNAVAILABLE") ||
+          msg.includes("high demand") ||
+          msg.includes("overloaded");
+
+        if (isTransient) {
+          await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error("All Gemini models failed to respond.");
 }
 
 const CHARACTER_SCHEMA = {
@@ -194,49 +254,49 @@ const SCENE_SCHEMA = {
   ],
 };
 
+// Health check endpoint
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, fps: 24 });
+});
+
 // POST /api/storyboard/generate
 app.post("/api/storyboard/generate", async (req, res) => {
   try {
-    const { prompt, sceneCount = 4, visualStyle = "Cel-Shaded Adventure" } = req.body;
+    const { prompt, sceneCount = 3, visualStyle = "Cel-Shaded Adventure" } = req.body;
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       res.status(400).json({ error: "Please provide a story prompt or script." });
       return;
     }
 
     const ai = getGeminiClient();
-    const clampedScenes = Math.min(Math.max(Number(sceneCount) || 4, 2), 6);
+    const clampedScenes = Math.min(Math.max(Number(sceneCount) || 3, 2), 6);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: `Create a complete ${clampedScenes}-scene 24 FPS animated story project based on this user prompt: "${prompt.trim()}"
+    const rawText = await generateWithFallback(
+      ai,
+      `Create a complete ${clampedScenes}-scene 24 FPS animated story project based on this user prompt: "${prompt.trim()}"
 Visual Style: ${visualStyle}.
 Ensure characters have expressive contrasting hex colors, natural movement across the stage (startX to endX), varied camera motions, atmospheric weather, and well-timed spoken dialogue lines that fit within each scene's durationSeconds.`,
-      config: {
-        systemInstruction:
-          "You are a master 24 FPS animation director and storyboard artist. Break stories into vivid animated scenes with 2 to 3 recurring characters, expressive poses, dynamic camera movements, and punchy character dialogue. Always use valid enum strings requested in the schema.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING, description: "Catchy title for the animated short" },
-            visualStyle: { type: Type.STRING },
-            logline: { type: Type.STRING, description: "One sentence summary of the story" },
-            characters: {
-              type: Type.ARRAY,
-              items: CHARACTER_SCHEMA,
-            },
-            scenes: {
-              type: Type.ARRAY,
-              items: SCENE_SCHEMA,
-            },
+      "You are a master 24 FPS animation director and storyboard artist. Break stories into vivid animated scenes with 2 to 3 recurring characters, expressive poses, dynamic camera movements, and punchy character dialogue. Always use valid enum strings requested in the schema.",
+      {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: "Catchy title for the animated short" },
+          visualStyle: { type: Type.STRING },
+          logline: { type: Type.STRING, description: "One sentence summary of the story" },
+          characters: {
+            type: Type.ARRAY,
+            items: CHARACTER_SCHEMA,
           },
-          required: ["title", "visualStyle", "logline", "characters", "scenes"],
+          scenes: {
+            type: Type.ARRAY,
+            items: SCENE_SCHEMA,
+          },
         },
-      },
-    });
+        required: ["title", "visualStyle", "logline", "characters", "scenes"],
+      }
+    );
 
-    const rawText = (response.text ?? "{}").trim();
-    const parsed = JSON.parse(rawText);
+    const parsed = JSON.parse(rawText.trim());
 
     const FPS = 24;
     const project = {
@@ -310,14 +370,14 @@ Ensure characters have expressive contrasting hex colors, natural movement acros
       }),
     };
 
-    res.json({ project });
+    res.status(200).json({ project });
   } catch (error: any) {
     console.error("Error generating storyboard:", error);
-    const status = error?.status || 500;
-    res.status(status).json({
+    // Always return HTTP 200 or 400 with structured JSON so reverse proxies never intercept 502/503 with an HTML error page
+    res.status(400).json({
       error:
         error?.message ||
-        "Failed to generate 24 FPS storyboard with Gemini AI. Please check your API key in Settings > Secrets.",
+        "Failed to generate 24 FPS storyboard with Gemini AI. Please verify GEMINI_API_KEY in Settings > Secrets.",
     });
   }
 });
@@ -328,22 +388,18 @@ app.post("/api/storyboard/regenerate-scene", async (req, res) => {
     const { projectTitle, characters, scenePrompt, currentScene } = req.body;
     const ai = getGeminiClient();
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: `Project: "${projectTitle}"
+    const rawText = await generateWithFallback(
+      ai,
+      `Project: "${projectTitle}"
 Available Characters: ${JSON.stringify(characters)}
 Current Scene Context: ${JSON.stringify(currentScene)}
 User Direction for New/Updated Scene: "${scenePrompt || "Make this scene more dynamic with expressive dialogue and action"}"
 Generate a single updated 24 FPS scene object matching the schema.`,
-      config: {
-        systemInstruction:
-          "You are a 24 FPS animation director. Return a single refined scene using the provided character IDs.",
-        responseMimeType: "application/json",
-        responseSchema: SCENE_SCHEMA,
-      },
-    });
+      "You are a 24 FPS animation director. Return a single refined scene using the provided character IDs.",
+      SCENE_SCHEMA
+    );
 
-    const parsed = JSON.parse((response.text ?? "{}").trim());
+    const parsed = JSON.parse(rawText.trim());
     const FPS = 24;
     const durSec = Math.max(3, Math.min(10, Math.round(Number(parsed.durationSeconds) || 4)));
     const durationFrames = durSec * FPS;
@@ -395,13 +451,20 @@ Generate a single updated 24 FPS scene object matching the schema.`,
       }),
     };
 
-    res.json({ scene: updatedScene });
+    res.status(200).json({ scene: updatedScene });
   } catch (error: any) {
     console.error("Error regenerating scene:", error);
-    res.status(error?.status || 500).json({
+    res.status(400).json({
       error: error?.message || "Failed to regenerate scene.",
     });
   }
+});
+
+// Catch-all for any unmatched /api/* routes so Vite never serves <!doctype html> for API calls
+app.all("/api/*", (_req, res) => {
+  res.status(404).json({
+    error: "API route not found. Make sure you started the server with `npm run dev` (tsx server.ts).",
+  });
 });
 
 async function startServer() {
