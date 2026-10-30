@@ -138,9 +138,9 @@ export interface RenderOptions {
 }
 
 /**
- * Formats a 0-based frame index at 24 FPS into SMPTE timecode MM:SS:FF
+ * Formats a 0-based frame index into timecode MM:SS:FF
  */
-export function formatSMPTE24(frame: number): string {
+export function formatTimecode(frame: number): string {
   const safeFrame = Math.max(0, Math.floor(frame));
   const totalSeconds = Math.floor(safeFrame / 24);
   const ff = safeFrame % 24;

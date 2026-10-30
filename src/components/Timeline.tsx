@@ -15,12 +15,12 @@ import {
 import {
   AnimationProject,
   RenderOptions,
-  formatSMPTE24,
+  formatTimecode,
   getProjectTotalFrames,
   resolveSceneAtFrame,
 } from '../types/animation';
 
-interface Timeline24FPSProps {
+interface TimelineProps {
   project: AnimationProject;
   currentFrame: number;
   isPlaying: boolean;
@@ -35,7 +35,7 @@ interface Timeline24FPSProps {
   onSelectScene: (sceneId: string, jumpToStart?: boolean) => void;
 }
 
-export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
+export const Timeline: React.FC<TimelineProps> = ({
   project,
   currentFrame,
   isPlaying,
@@ -102,7 +102,7 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
 
   return (
     <section
-      aria-label="24 FPS Master Timeline"
+      aria-label="Master Timeline"
       className="bg-slate-900 border-t border-slate-800 flex flex-col select-none shrink-0"
     >
       {/* Top Transport & Telemetry Bar */}
@@ -112,7 +112,7 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
           <button
             type="button"
             onClick={() => onSelectFrame(0)}
-            title="Jump to First Frame (Frame 1)"
+            title="Jump to First Frame"
             className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <SkipBack className="w-4 h-4" />
@@ -120,7 +120,7 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
           <button
             type="button"
             onClick={() => onStepFrame(-1)}
-            title="Step Back 1 Frame (-1/24s)"
+            title="Step Back 1 Frame"
             className="px-2.5 py-1.5 rounded-md text-xs font-mono text-slate-300 hover:text-white hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -139,14 +139,14 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
             ) : (
               <>
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Play 24 FPS</span>
+                <span>Play</span>
               </>
             )}
           </button>
           <button
             type="button"
             onClick={() => onStepFrame(1)}
-            title="Step Forward 1 Frame (+1/24s)"
+            title="Step Forward 1 Frame"
             className="px-2.5 py-1.5 rounded-md text-xs font-mono text-slate-300 hover:text-white hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             <span>+1F</span>
@@ -175,10 +175,10 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
           </button>
         </div>
 
-        {/* Center: Tabular SMPTE Timecode & Exact Frame Readout */}
+        {/* Center: Tabular Timecode & Exact Frame Readout */}
         <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-300">
           <span className="text-amber-400 font-semibold">
-            {formatSMPTE24(currentFrame)}
+            {formatTimecode(currentFrame)}
           </span>
           <span aria-hidden="true" className="text-slate-600">
             ·
@@ -190,7 +190,7 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
           <span aria-hidden="true" className="text-slate-600">
             ·
           </span>
-          <span>{(totalFrames / 24).toFixed(1)}s @ 24.0 FPS</span>
+          <span>{(totalFrames / 24).toFixed(1)}s</span>
           <span aria-hidden="true" className="text-slate-600">
             ·
           </span>
@@ -214,7 +214,7 @@ export const Timeline24FPS: React.FC<Timeline24FPSProps> = ({
                 ? 'bg-slate-800 text-sky-300'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="Show -2F and +2F 24 FPS Onion Skin Ghosts"
+            title="Show Previous and Next Frame Onion Skin Ghosts"
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Onion Skin</span>

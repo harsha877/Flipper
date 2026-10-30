@@ -74,9 +74,6 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({
           <h2 className="text-sm font-semibold text-slate-100 tracking-tight">
             AI Script &amp; Storyboard Director
           </h2>
-          <span className="text-xs text-slate-400 font-mono tabular-nums">
-            24 FPS Engine
-          </span>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -154,12 +151,12 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({
             {isGeneratingProject ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Directing 24 FPS Storyboard...</span>
+                <span>Directing Storyboard...</span>
               </>
             ) : (
               <>
                 <Wand2 className="w-3.5 h-3.5" />
-                <span>Generate 24 FPS Storyboard</span>
+                <span>Generate Storyboard</span>
               </>
             )}
           </button>
@@ -229,11 +226,11 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({
                     onClick={() =>
                       onRegenerateScene(
                         scene,
-                        `Enhance action and dialogue for scene: ${scene.title}`
+                        `Update this scene to match the narrative summary: "${scene.narrativeSummary}" (Title: "${scene.title}")`
                       )
                     }
                     disabled={isRegenerating}
-                    title="AI Rewrite Scene"
+                    title="Re-stage Scene from Narrative Summary"
                     className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
                   >
                     <RefreshCw
