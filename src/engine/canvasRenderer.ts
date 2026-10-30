@@ -9,7 +9,7 @@ import {
   SceneSpec,
   TimeOfDay,
   WeatherEffect,
-  formatSMPTE24,
+  formatTimecode,
   getProjectTotalFrames,
   resolveSceneAtFrame,
 } from '../types/animation';
@@ -1010,20 +1010,20 @@ function drawTimecodeBurnIn(
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
   ctx.lineWidth = 1;
 
-  // Top-left SMPTE 24 FPS readout
+  // Top-left timecode readout
   ctx.beginPath();
-  ctx.roundRect(24, 20, 290, 34, 6);
+  ctx.roundRect(24, 20, 230, 34, 6);
   ctx.fill();
   ctx.stroke();
 
   ctx.font = '500 13px "JetBrains Mono", monospace';
   ctx.fillStyle = '#F8FAFC';
   ctx.textAlign = 'left';
-  const smpte = formatSMPTE24(globalFrame);
+  const smpte = formatTimecode(globalFrame);
   ctx.fillText(
     `TC ${smpte} · F${String(globalFrame + 1).padStart(3, '0')}/${String(
       totalFrames
-    ).padStart(3, '0')} · 24 FPS`,
+    ).padStart(3, '0')}`,
     36,
     42
   );

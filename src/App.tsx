@@ -15,7 +15,7 @@ import {
   CharacterSpec,
   RenderOptions,
   SceneSpec,
-  formatSMPTE24,
+  formatTimecode,
   getProjectTotalFrames,
   resolveSceneAtFrame,
 } from './types/animation';
@@ -23,7 +23,7 @@ import { STARTER_PROJECTS } from './data/presets';
 import { renderProjectFrame } from './engine/canvasRenderer';
 import { StoryboardPanel } from './components/StoryboardPanel';
 import { SceneInspector } from './components/SceneInspector';
-import { Timeline24FPS } from './components/Timeline24FPS';
+import { Timeline } from './components/Timeline';
 import { VideoExportModal } from './components/VideoExportModal';
 
 type WorkspaceView = 'studio' | 'storyboard' | 'characters' | 'presets';
@@ -421,7 +421,7 @@ export default function App() {
           }}
           className="text-lg font-bold tracking-tight text-slate-100 font-display whitespace-nowrap shrink-0"
         >
-          CelFrame 24
+          Flipper
         </a>
 
         {/* Zone 2: 4 concise single-line text navigation links */}
@@ -494,7 +494,7 @@ export default function App() {
             }}
             className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-500 rounded-lg hover:bg-amber-400 transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
-            Export 24 FPS Video
+            Export Video
           </button>
         </div>
       </header>
@@ -519,7 +519,7 @@ export default function App() {
               onRegenerateScene={handleRegenerateScene}
             />
 
-            {/* Center Viewport: 24 FPS 16:9 Stage Canvas */}
+            {/* Center Viewport: 16:9 Stage Canvas */}
             <main className="flex-1 flex flex-col bg-slate-950 min-w-0 overflow-hidden">
               {/* Sub-header context bar */}
               <div className="px-6 py-2.5 border-b border-slate-800/80 flex items-center justify-between gap-4 bg-slate-900/40 shrink-0">
@@ -541,7 +541,7 @@ export default function App() {
                   </span>
                   <span aria-hidden="true">·</span>
                   <span className="text-amber-400">
-                    Local F{localFrame + 1}/{selectedScene.durationFrames}
+                    Frame {localFrame + 1}/{selectedScene.durationFrames}
                   </span>
                 </div>
               </div>
@@ -554,7 +554,7 @@ export default function App() {
                     width={project.width || 1280}
                     height={project.height || 720}
                     onClick={() => setIsPlaying((p) => !p)}
-                    title="Click stage to Play / Pause 24 FPS animation"
+                    title="Click stage to Play / Pause animation"
                     className="w-full h-full object-contain cursor-pointer block"
                   />
                 </div>
@@ -565,12 +565,14 @@ export default function App() {
             <SceneInspector
               project={project}
               selectedScene={selectedScene}
+              isRegenerating={regeneratingSceneId === selectedScene.id}
               onUpdateScene={handleUpdateScene}
+              onRegenerateScene={handleRegenerateScene}
             />
           </div>
 
-          {/* Bottom Dock: 24 FPS Interactive Timeline */}
-          <Timeline24FPS
+          {/* Bottom Dock: Interactive Timeline */}
+          <Timeline
             project={project}
             currentFrame={currentFrame}
             isPlaying={isPlaying}
@@ -595,7 +597,7 @@ export default function App() {
           <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-5">
             <div>
               <p className="text-xs font-mono tabular-nums text-amber-400 mb-1">
-                24 FPS PRODUCTION EXPOSURE SHEET · {totalFrames} FRAMES TOTAL (
+                PRODUCTION EXPOSURE SHEET · {totalFrames} FRAMES TOTAL (
                 {(totalFrames / 24).toFixed(1)}s)
               </p>
               <h1 className="text-2xl font-bold text-slate-100 font-display">
@@ -621,7 +623,7 @@ export default function App() {
                 className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-xs font-semibold text-slate-950 flex items-center gap-2 cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current" />
-                <span>Open in 24 FPS Stage</span>
+                <span>Open in Stage</span>
               </button>
             </div>
           </div>
@@ -631,6 +633,7 @@ export default function App() {
               const startFrame = project.scenes
                 .slice(0, idx)
                 .reduce((acc, s) => acc + s.durationFrames, 0);
+              const isCardRegenerating = regeneratingSceneId === sc.id;
               return (
                 <div
                   key={sc.id}
@@ -642,19 +645,57 @@ export default function App() {
                         SCENE 0{idx + 1}
                       </span>
                       <span>
-                        {formatSMPTE24(startFrame)} →{' '}
-                        {formatSMPTE24(startFrame + sc.durationFrames)} (
+                        {formatTimecode(startFrame)} →{' '}
+                        {formatTimecode(startFrame + sc.durationFrames)} (
                         {sc.durationFrames}F)
                       </span>
                     </div>
 
-                    <h2 className="text-base font-semibold text-slate-100">
-                      {sc.title}
-                    </h2>
+                    <input
+                      type="text"
+                      value={sc.title}
+                      onChange={(e) =>
+                        handleUpdateScene({ ...sc, title: e.target.value })
+                      }
+                      className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-sm font-semibold text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {sc.narrativeSummary}
-                    </p>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">
+                        Narrative Action Summary (Edit &amp; Apply to Stage)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={sc.narrativeSummary}
+                        onChange={(e) =>
+                          handleUpdateScene({
+                            ...sc,
+                            narrativeSummary: e.target.value,
+                          })
+                        }
+                        className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-amber-500 resize-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={
+                          isCardRegenerating || !sc.narrativeSummary.trim()
+                        }
+                        onClick={() =>
+                          handleRegenerateScene(
+                            sc,
+                            `Update this scene's character actions, expressions, positions, camera, environment, and dialogue to match this narrative action summary: "${sc.narrativeSummary}" (Scene Title: "${sc.title}")`
+                          )
+                        }
+                        className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 disabled:opacity-40 text-amber-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {isCardRegenerating
+                            ? 'Applying Narrative...'
+                            : 'Apply Narrative to Scene'}
+                        </span>
+                      </button>
+                    </div>
 
                     <div className="text-xs text-slate-400 flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
                       <span className="capitalize">
@@ -721,14 +762,14 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
                 <Users className="w-4 h-4" />
-                <span>24 FPS ARTICULATED PUPPET RIGS</span>
+                <span>ARTICULATED PUPPET RIGS</span>
               </div>
               <h1 className="text-2xl font-bold text-slate-100 font-display">
                 Character Cast &amp; Rig Wardrobe
               </h1>
               <p className="text-sm text-slate-400 mt-1">
                 Customize character silhouettes, color palettes, body rigs, and
-                accessories. Changes immediately update across all 24 FPS scenes.
+                accessories. Changes immediately update across all scenes.
               </p>
             </div>
 
@@ -909,13 +950,13 @@ export default function App() {
           <div className="border-b border-slate-800 pb-5">
             <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
               <BookOpen className="w-4 h-4" />
-              <span>READY-TO-PLAY 24 FPS PRODUCTIONS</span>
+              <span>READY-TO-PLAY PRODUCTIONS</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-100 font-display">
               Starter Animated Story Projects
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Load a curated multi-scene 24 FPS story production to inspect its
+              Load a curated multi-scene story production to inspect its
               rigging, camera choreography, or remix it with Gemini AI.
             </p>
           </div>
@@ -941,7 +982,7 @@ export default function App() {
                       <span aria-hidden="true">·</span>
                       <span>{presetFrames} Frames</span>
                       <span aria-hidden="true">·</span>
-                      <span>{(presetFrames / 24).toFixed(1)}s @ 24 FPS</span>
+                      <span>{(presetFrames / 24).toFixed(1)}s</span>
                     </div>
 
                     <h2 className="text-lg font-bold text-slate-100 font-display">
@@ -970,7 +1011,7 @@ export default function App() {
                     className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Film className="w-4 h-4" />
-                    <span>Load into 24 FPS Studio</span>
+                    <span>Load into Studio</span>
                   </button>
                 </div>
               );
@@ -979,7 +1020,7 @@ export default function App() {
         </main>
       )}
 
-      {/* 24 FPS Video Export Modal */}
+      {/* Video Export Modal */}
       {isExportModalOpen && (
         <VideoExportModal
           project={project}

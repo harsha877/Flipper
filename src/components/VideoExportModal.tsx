@@ -3,7 +3,7 @@ import { X, Download, Film, CheckCircle2, RefreshCw } from 'lucide-react';
 import {
   AnimationProject,
   RenderOptions,
-  formatSMPTE24,
+  formatTimecode,
   getProjectTotalFrames,
 } from '../types/animation';
 import { renderProjectFrame } from '../engine/canvasRenderer';
@@ -52,7 +52,7 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
     };
   }, [videoUrl]);
 
-  const start24FPSRender = () => {
+  const startVideoRender = () => {
     const canvas = exportCanvasRef.current;
     if (!canvas || isRendering) return;
     const ctx = canvas.getContext('2d');
@@ -124,7 +124,7 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Film className="w-4 h-4 text-amber-400" />
             <h2 className="text-base font-semibold text-slate-100">
-              Render &amp; Export 24 FPS Video
+              Render &amp; Export Video
             </h2>
           </div>
           <button
@@ -153,7 +153,7 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono tabular-nums text-slate-400">
             <span>Resolution: 1280×720 (16:9 HD)</span>
             <span aria-hidden="true">·</span>
-            <span className="text-amber-400">Frame Rate: Locked 24.0 FPS</span>
+            <span className="text-amber-400">Format: WebM VP9</span>
             <span aria-hidden="true">·</span>
             <span>
               Total Length: {totalFrames} Frames ({(totalFrames / 24).toFixed(1)}s)
@@ -181,7 +181,7 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
                 onChange={(e) => setIncludeBurnIn(e.target.checked)}
                 className="accent-amber-500 rounded"
               />
-              <span>Include SMPTE 24 FPS Timecode Overlay</span>
+              <span>Include Timecode Overlay</span>
             </label>
           </div>
 
@@ -191,10 +191,10 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
               <div className="flex items-center justify-between text-xs font-mono tabular-nums">
                 <span className="text-slate-300">
                   {isRendering
-                    ? `Encoding Frame ${renderedFrame} of ${totalFrames} (${formatSMPTE24(
+                    ? `Encoding Frame ${renderedFrame} of ${totalFrames} (${formatTimecode(
                         renderedFrame
                       )})...`
-                    : '24 FPS Render Complete'}
+                    : 'Render Complete'}
                 </span>
                 <span className="text-amber-400">{progressPct}%</span>
               </div>
@@ -212,11 +212,11 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
             {!isRendering && (
               <button
                 type="button"
-                onClick={start24FPSRender}
+                onClick={startVideoRender}
                 className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-100 transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>{videoUrl ? 'Re-Render 24 FPS Video' : 'Start 24 FPS Render'}</span>
+                <span>{videoUrl ? 'Re-Render Video' : 'Start Render'}</span>
               </button>
             )}
 
@@ -225,12 +225,12 @@ export const VideoExportModal: React.FC<VideoExportModalProps> = ({
                 href={videoUrl}
                 download={`${project.title
                   .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, '_')}_24fps.webm`}
+                  .replace(/[^a-z0-9]+/g, '_')}.webm`}
                 className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <Download className="w-3.5 h-3.5" />
-                <span>Download 24 FPS .WebM</span>
+                <span>Download .WebM</span>
               </a>
             )}
           </div>

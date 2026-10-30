@@ -5,6 +5,8 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  Wand2,
+  RefreshCw,
 } from 'lucide-react';
 import {
   AnimationProject,
@@ -23,7 +25,9 @@ import {
 interface SceneInspectorProps {
   project: AnimationProject;
   selectedScene: SceneSpec;
+  isRegenerating: boolean;
   onUpdateScene: (updated: SceneSpec) => void;
+  onRegenerateScene: (scene: SceneSpec, directionPrompt: string) => void;
 }
 
 const ENVIRONMENTS: { value: EnvironmentTheme; label: string }[] = [
@@ -92,7 +96,9 @@ const EXPRESSIONS: CharacterExpression[] = [
 export const SceneInspector: React.FC<SceneInspectorProps> = ({
   project,
   selectedScene,
+  isRegenerating,
   onUpdateScene,
+  onRegenerateScene,
 }) => {
   const [activeTab, setActiveTab] = useState<'stage' | 'actors' | 'dialogue'>(
     'stage'
@@ -161,7 +167,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
       id: `dlg_${Date.now()}`,
       characterId: speaker?.id || 'char_1',
       speakerName: speaker?.name || 'Character',
-      text: 'New 24 FPS synchronized dialogue line!',
+      text: 'New synchronized dialogue line!',
       startFrameOffset: 6,
       durationFrames: 42,
     };
@@ -245,25 +251,54 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
               />
             </div>
 
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">
-                Narrative Action Summary
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs text-slate-400">
+                  Narrative Action Summary
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Editable AI prompt
+                </span>
+              </div>
               <textarea
-                rows={2}
+                rows={3}
                 value={selectedScene.narrativeSummary}
+                placeholder="Describe what happens in this scene (actions, mood, camera, dialogue)..."
                 onChange={(e) =>
                   handleFieldChange('narrativeSummary', e.target.value)
                 }
-                className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 resize-none"
+                className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
               />
+              <button
+                type="button"
+                disabled={
+                  isRegenerating || !selectedScene.narrativeSummary.trim()
+                }
+                onClick={() =>
+                  onRegenerateScene(
+                    selectedScene,
+                    `Update this scene's character actions, expressions, positions, camera, environment, and dialogue to match this narrative action summary: "${selectedScene.narrativeSummary}" (Scene Title: "${selectedScene.title}")`
+                  )
+                }
+                className="w-full py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 disabled:opacity-40 text-amber-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                {isRegenerating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Applying Narrative to Stage...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>Apply Narrative to Stage</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-slate-400">
-                  Scene Duration (24 FPS Multiple)
-                </span>
+                <span className="text-slate-400">Scene Duration</span>
                 <span className="font-mono tabular-nums text-amber-400">
                   {selectedScene.durationFrames} Frames ·{' '}
                   {(selectedScene.durationFrames / 24).toFixed(1)}s
@@ -334,7 +369,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
             <div className="grid grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">
-                  24 FPS Weather Particles
+                  Weather Particles
                 </label>
                 <select
                   value={selectedScene.weatherEffect}
@@ -452,7 +487,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-0.5">
-                      24 FPS Action
+                      Action
                     </label>
                     <select
                       value={placement.action}
@@ -559,7 +594,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">
-                24 FPS Lip-Sync &amp; Subtitle Lines
+                Lip-Sync &amp; Subtitle Lines
               </span>
               <button
                 type="button"
