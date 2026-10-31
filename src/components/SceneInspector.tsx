@@ -18,6 +18,8 @@ import {
   EnvironmentTheme,
   ForegroundProp,
   SceneSpec,
+  SceneTransition,
+  ShotType,
   TimeOfDay,
   WeatherEffect,
 } from '../types/animation';
@@ -30,7 +32,17 @@ interface SceneInspectorProps {
   onRegenerateScene: (scene: SceneSpec, directionPrompt: string) => void;
 }
 
+const SHOT_TYPES: { value: ShotType; label: string }[] = [
+  { value: 'wide', label: 'Wide Establishing Shot' },
+  { value: 'medium', label: 'Medium Side Profile' },
+  { value: 'close_up', label: 'Close-Up Detail Shot' },
+  { value: 'over_shoulder', label: 'Over-the-Shoulder Horizon' },
+];
+
 const ENVIRONMENTS: { value: EnvironmentTheme; label: string }[] = [
+  { value: 'water_drop_macro', label: 'Macro Water & Golden Ripples' },
+  { value: 'candy_shop', label: 'Cozy Pastel Candy Shop' },
+  { value: 'tropical_beach', label: 'Tropical Beach (Golden Hour)' },
   { value: 'forest', label: 'Bioluminescent Forest' },
   { value: 'cyber_city', label: 'Neon Cyber City' },
   { value: 'space_station', label: 'Orbital Space Station' },
@@ -47,7 +59,7 @@ const TIMES_OF_DAY: { value: TimeOfDay; label: string }[] = [
 ];
 
 const WEATHER_OPTIONS: { value: WeatherEffect; label: string }[] = [
-  { value: 'clear', label: 'Clear Sky' },
+  { value: 'clear', label: 'Clear Sky / Gentle Breeze' },
   { value: 'fireflies', label: 'Glowing Spores / Fireflies' },
   { value: 'rain', label: 'Cinematic Rain' },
   { value: 'snow', label: 'Drifting Snow' },
@@ -65,6 +77,14 @@ const CAMERA_MOTIONS: { value: CameraMotion; label: string }[] = [
 
 const PROPS: { value: ForegroundProp; label: string }[] = [
   { value: 'none', label: 'None' },
+  { value: 'water_drop', label: 'Macro Forming & Falling Water Drop' },
+  { value: 'water_crown', label: 'Slow-Motion Crown Splash & Rebound' },
+  { value: 'water_ripples', label: 'Top-Down Concentric Golden Ripples' },
+  { value: 'water_still', label: 'Fading Ripples & Sunset Stillness' },
+  { value: 'candy_counter', label: 'Candy Shop Counter & Scale' },
+  { value: 'candy_jars', label: 'Glass Candy Jars & Scoop' },
+  { value: 'beach_lounger', label: 'Wooden Beach Lounger' },
+  { value: 'iced_drink', label: 'Iced Drink with Lime' },
   { value: 'monolith', label: 'Floating Alien Monolith' },
   { value: 'ramen_cart', label: 'Midnight Ramen Stall' },
   { value: 'telescope', label: 'Brass Horizon Telescope' },
@@ -73,6 +93,14 @@ const PROPS: { value: ForegroundProp; label: string }[] = [
 ];
 
 const ACTIONS: CharacterAction[] = [
+  'enter_door',
+  'scoop_candy',
+  'weigh_and_hand',
+  'eat_candy',
+  'relax_lounger',
+  'sip_drink',
+  'gaze_horizon',
+  'sit',
   'idle',
   'walk',
   'run',
@@ -256,9 +284,19 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                 <label className="block text-xs text-slate-400">
                   Narrative Action Summary
                 </label>
-                <span className="text-[11px] text-slate-500">
-                  Editable AI prompt
-                </span>
+                {selectedScene.narrativeSummary ? (
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange('narrativeSummary', '')}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                  >
+                    Clear summary
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-500">
+                    Editable AI prompt
+                  </span>
+                )}
               </div>
               <textarea
                 rows={3}
@@ -277,7 +315,7 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                 onClick={() =>
                   onRegenerateScene(
                     selectedScene,
-                    `Update this scene's character actions, expressions, positions, camera, environment, and dialogue to match this narrative action summary: "${selectedScene.narrativeSummary}" (Scene Title: "${selectedScene.title}")`
+                    selectedScene.narrativeSummary
                   )
                 }
                 className="w-full py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 disabled:opacity-40 text-amber-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
@@ -412,26 +450,76 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Shot Framing
+                </label>
+                <select
+                  value={selectedScene.shotType || 'medium'}
+                  onChange={(e) =>
+                    handleFieldChange('shotType', e.target.value as ShotType)
+                  }
+                  className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                >
+                  {SHOT_TYPES.map((st) => (
+                    <option key={st.value} value={st.value}>
+                      {st.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Camera Choreography
+                </label>
+                <select
+                  value={selectedScene.cameraMotion}
+                  onChange={(e) =>
+                    handleFieldChange(
+                      'cameraMotion',
+                      e.target.value as CameraMotion
+                    )
+                  }
+                  className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                >
+                  {CAMERA_MOTIONS.map((cm) => (
+                    <option key={cm.value} value={cm.value}>
+                      {cm.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-slate-400 mb-1">
-                Camera Choreography Curve
+                Transition to Next Shot
               </label>
               <select
-                value={selectedScene.cameraMotion}
+                value={selectedScene.transitionToNext || 'cross_dissolve'}
                 onChange={(e) =>
                   handleFieldChange(
-                    'cameraMotion',
-                    e.target.value as CameraMotion
+                    'transitionToNext',
+                    e.target.value as SceneTransition
                   )
                 }
                 className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
               >
-                {CAMERA_MOTIONS.map((cm) => (
-                  <option key={cm.value} value={cm.value}>
-                    {cm.label}
-                  </option>
-                ))}
+                <option value="cross_dissolve">
+                  Cross-Dissolve (Smooth 12-Frame Blend)
+                </option>
+                <option value="fade_through_gold">
+                  Golden Hour Bloom Dissolve
+                </option>
+                <option value="smooth_cut">Direct Match Cut</option>
               </select>
+              {selectedScene.continuityNote && (
+                <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">
+                  {selectedScene.continuityNote}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -442,15 +530,28 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
               <span className="text-xs text-slate-400">
                 Character Keyframes (Start → End Frame)
               </span>
-              <button
-                type="button"
-                onClick={handleAddActorToScene}
-                className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Actor</span>
-              </button>
+              {project.characters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAddActorToScene}
+                  className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Actor</span>
+                </button>
+              )}
             </div>
+
+            {selectedScene.characterPlacements.length === 0 && (
+              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 text-center space-y-1.5">
+                <p className="text-xs font-medium text-slate-300">
+                  No actors in this scene (0 Actors)
+                </p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Pure environment, nature, or macro fluid study without characters on stage.
+                </p>
+              </div>
+            )}
 
             {selectedScene.characterPlacements.map((placement, idx) => (
               <div

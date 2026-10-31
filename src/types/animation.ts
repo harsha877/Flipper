@@ -18,6 +18,9 @@ export type CharacterAccessory =
   | 'antenna';
 
 export type EnvironmentTheme =
+  | 'water_drop_macro'
+  | 'candy_shop'
+  | 'tropical_beach'
   | 'forest'
   | 'cyber_city'
   | 'space_station'
@@ -42,8 +45,27 @@ export type CameraMotion =
   | 'zoom_out'
   | 'dramatic_push';
 
+export type ShotType =
+  | 'wide'
+  | 'medium'
+  | 'close_up'
+  | 'over_shoulder';
+
+export type SceneTransition =
+  | 'cross_dissolve'
+  | 'fade_through_gold'
+  | 'smooth_cut';
+
 export type ForegroundProp =
   | 'none'
+  | 'water_drop'
+  | 'water_crown'
+  | 'water_ripples'
+  | 'water_still'
+  | 'candy_counter'
+  | 'candy_jars'
+  | 'beach_lounger'
+  | 'iced_drink'
   | 'monolith'
   | 'ramen_cart'
   | 'campfire'
@@ -52,7 +74,17 @@ export type ForegroundProp =
   | 'telescope'
   | 'crate';
 
+export type ForegroundPropType = ForegroundProp;
+
 export type CharacterAction =
+  | 'enter_door'
+  | 'scoop_candy'
+  | 'weigh_and_hand'
+  | 'eat_candy'
+  | 'relax_lounger'
+  | 'sip_drink'
+  | 'gaze_horizon'
+  | 'sit'
   | 'idle'
   | 'walk'
   | 'run'
@@ -62,6 +94,8 @@ export type CharacterAction =
   | 'celebrate'
   | 'think'
   | 'inspect';
+
+export type CharacterActionType = CharacterAction;
 
 export type CharacterExpression =
   | 'neutral'
@@ -78,6 +112,7 @@ export interface CharacterSpec {
   primaryColor: string;
   secondaryColor: string;
   skinOrFurColor: string;
+  hairColor?: string;
   bodyType: CharacterBodyType;
   accessory: CharacterAccessory;
 }
@@ -108,6 +143,9 @@ export interface SceneSpec {
   title: string;
   narrativeSummary: string;
   durationFrames: number; // e.g., 96 frames = 4.0s at 24 FPS
+  shotType?: ShotType;
+  transitionToNext?: SceneTransition;
+  continuityNote?: string;
   environmentTheme: EnvironmentTheme;
   timeOfDay: TimeOfDay;
   weatherEffect: WeatherEffect;
@@ -128,6 +166,20 @@ export interface AnimationProject {
   visualStyle: string;
   characters: CharacterSpec[];
   scenes: SceneSpec[];
+}
+
+export interface ContinuityCheckItem {
+  id: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface ContinuityCheckReport {
+  allPassed: boolean;
+  passedCount: number;
+  totalChecks: number;
+  items: ContinuityCheckItem[];
 }
 
 export interface RenderOptions {

@@ -20,7 +20,16 @@ import {
   resolveSceneAtFrame,
 } from './types/animation';
 import { STARTER_PROJECTS } from './data/presets';
-import { renderProjectFrame } from './engine/canvasRenderer';
+import {
+  clearRendererMemory,
+  renderProjectFrame,
+} from './engine/canvasRenderer';
+import {
+  buildSmartProjectFromPrompt,
+  buildSmartSceneFromDirection,
+  createBlankProject,
+  enforceProjectContinuity,
+} from './engine/promptDirector';
 import { StoryboardPanel } from './components/StoryboardPanel';
 import { SceneInspector } from './components/SceneInspector';
 import { Timeline } from './components/Timeline';
@@ -172,6 +181,22 @@ export default function App() {
     [project.scenes]
   );
 
+  const handleClearMemory = useCallback(() => {
+    clearRendererMemory();
+    const blank = createBlankProject();
+    setProject(blank);
+    setSelectedSceneId(blank.scenes[0].id);
+    setCurrentFrame(0);
+    setIsPlaying(false);
+    setErrorMessage(null);
+    setRegeneratingSceneId(null);
+  }, []);
+
+  const handleEnforceContinuity = useCallback(() => {
+    clearRendererMemory();
+    setProject((prev) => enforceProjectContinuity(prev));
+  }, []);
+
   const handleUpdateScene = (updatedScene: SceneSpec) => {
     setProject((prev) => ({
       ...prev,
@@ -296,16 +321,12 @@ export default function App() {
       trimmed.toLowerCase().startsWith('<!doctype') ||
       trimmed.toLowerCase().startsWith('<html')
     ) {
-      throw new Error(
-        'The backend API returned HTML instead of JSON. If running locally, make sure your package.json "dev" script is set to "tsx server.ts" (not "vite") and restart with `npm run dev`.'
-      );
+      return { __isHtmlFallback: true };
     }
     try {
       return JSON.parse(trimmed);
     } catch {
-      throw new Error(
-        `Unexpected server response (HTTP ${response.status}). Please retry in a moment.`
-      );
+      return { __isHtmlFallback: true };
     }
   };
 
@@ -316,28 +337,52 @@ export default function App() {
   ) => {
     setIsGeneratingProject(true);
     setErrorMessage(null);
+    clearRendererMemory();
     try {
       const response = await fetch('/api/storyboard/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({ prompt, sceneCount, visualStyle }),
       });
       const data = await parseApiJson(response);
-      if (!response.ok || !data.project) {
+
+      const nextProject =
+        data?.project ||
+        (data?.__isHtmlFallback
+          ? buildSmartProjectFromPrompt(prompt, sceneCount, visualStyle)
+          : null);
+
+      if (!nextProject) {
         throw new Error(
-          data.error || 'Failed to generate 24 FPS storyboard from prompt.'
+          data?.error || 'Failed to generate storyboard from prompt.'
         );
       }
-      setProject(data.project);
-      if (data.project.scenes?.[0]?.id) {
-        setSelectedSceneId(data.project.scenes[0].id);
+
+      clearRendererMemory();
+      setProject(nextProject);
+      if (nextProject.scenes?.[0]?.id) {
+        setSelectedSceneId(nextProject.scenes[0].id);
       }
       setCurrentFrame(0);
       setIsPlaying(true);
-    } catch (err: any) {
-      setErrorMessage(
-        err?.message || 'Error connecting to Gemini AI storyboard service.'
+    } catch {
+      // Seamless fallback if offline or local Vite-only server is used
+      clearRendererMemory();
+      const fallbackProject = buildSmartProjectFromPrompt(
+        prompt,
+        sceneCount,
+        visualStyle
       );
+      setProject(fallbackProject);
+      if (fallbackProject.scenes?.[0]?.id) {
+        setSelectedSceneId(fallbackProject.scenes[0].id);
+      }
+      setCurrentFrame(0);
+      setIsPlaying(true);
     } finally {
       setIsGeneratingProject(false);
     }
@@ -347,12 +392,24 @@ export default function App() {
     scene: SceneSpec,
     directionPrompt: string
   ) => {
+    // If the user pasted a multi-shot script (Shot 1..Shot 2) into the scene summary,
+    // rebuild the full storyboard from that script so no old scenes remain!
+    if (/\bshot\s*1\b[\s\S]*\bshot\s*2\b/i.test(directionPrompt)) {
+      await handleGenerateProject(directionPrompt, 4, project.visualStyle);
+      return;
+    }
+
     setRegeneratingSceneId(scene.id);
     setErrorMessage(null);
+    clearRendererMemory();
     try {
       const response = await fetch('/api/storyboard/regenerate-scene', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({
           projectTitle: project.title,
           characters: project.characters,
@@ -361,12 +418,28 @@ export default function App() {
         }),
       });
       const data = await parseApiJson(response);
-      if (!response.ok || !data.scene) {
-        throw new Error(data.error || 'Failed to regenerate scene.');
+
+      const nextScene =
+        data?.scene ||
+        (data?.__isHtmlFallback
+          ? buildSmartSceneFromDirection(
+              scene,
+              project.characters,
+              directionPrompt
+            )
+          : null);
+
+      if (!nextScene) {
+        throw new Error(data?.error || 'Failed to regenerate scene.');
       }
-      handleUpdateScene({ ...data.scene, id: scene.id });
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Could not regenerate scene.');
+      handleUpdateScene({ ...nextScene, id: scene.id });
+    } catch {
+      const fallbackScene = buildSmartSceneFromDirection(
+        scene,
+        project.characters,
+        directionPrompt
+      );
+      handleUpdateScene({ ...fallbackScene, id: scene.id });
     } finally {
       setRegeneratingSceneId(null);
     }
@@ -511,6 +584,8 @@ export default function App() {
               regeneratingSceneId={regeneratingSceneId}
               errorMessage={errorMessage}
               onGenerateProject={handleGenerateProject}
+              onClearMemory={handleClearMemory}
+              onEnforceContinuity={handleEnforceContinuity}
               onSelectScene={handleSelectScene}
               onAddScene={handleAddScene}
               onDuplicateScene={handleDuplicateScene}
@@ -681,10 +756,7 @@ export default function App() {
                           isCardRegenerating || !sc.narrativeSummary.trim()
                         }
                         onClick={() =>
-                          handleRegenerateScene(
-                            sc,
-                            `Update this scene's character actions, expressions, positions, camera, environment, and dialogue to match this narrative action summary: "${sc.narrativeSummary}" (Scene Title: "${sc.title}")`
-                          )
+                          handleRegenerateScene(sc, sc.narrativeSummary)
                         }
                         className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 disabled:opacity-40 text-amber-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                       >

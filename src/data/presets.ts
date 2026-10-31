@@ -2,6 +2,425 @@ import { AnimationProject } from '../types/animation';
 
 export const STARTER_PROJECTS: AnimationProject[] = [
   {
+    id: 'preset_water_drop',
+    title: 'Golden Hour Water Drop',
+    prompt:
+      'Extreme close-up, slow-motion shot of a single clear water drop falling from above into a perfectly still body of water. The drop hits the surface, creating a small splash and a crown-shaped bounce, then soft circular ripples spread outward in perfect rings. Warm golden-hour sunlight reflects on the water, with sparkling highlights on each ripple. Dark, softly blurred background with gentle bokeh. Calm, peaceful, meditative mood. Macro lens, shallow depth of field, ultra-realistic, 4K, cinematic.\n\nShot 1 (0–3s): Macro shot of a water drop slowly forming and falling, catching the light as it drops.\nShot 2 (3–5s): Super slow-motion impact as the drop touches the surface, a tiny splash and a small droplet bouncing back up.\nShot 3 (5–8s): Top-down view of circular ripples spreading out evenly across the calm water.\nShot 4 (8–10s): The ripples fade and the water returns to stillness, reflecting the soft sunset sky.',
+    logline:
+      'An actor-free 4-shot macro fluid study at golden hour: a single refractive water droplet forms and falls, erupts into a slow-motion crown splash and rebound jet, radiates concentric sparkling ripples, and settles into sunset stillness.',
+    fps: 24,
+    width: 1280,
+    height: 720,
+    visualStyle: 'Macro 4K Golden Hour',
+    characters: [],
+    scenes: [
+      {
+        id: 'shot_water_1',
+        title: 'Shot 1: Macro Forming Drop',
+        narrativeSummary:
+          'Macro shot of a water drop slowly forming and falling, catching the light as it drops.',
+        durationFrames: 72, // 3.0s
+        shotType: 'close_up',
+        transitionToNext: 'fade_through_gold',
+        continuityNote:
+          'Continuous golden-hour macro lighting & fluid physics → smooth fade through gold into Shot 2 (close up)',
+        environmentTheme: 'water_drop_macro',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_in',
+        foregroundProp: 'water_drop',
+        characterPlacements: [],
+        dialogues: [],
+      },
+      {
+        id: 'shot_water_2',
+        title: 'Shot 2: Slow-Motion Crown Impact',
+        narrativeSummary:
+          'Super slow-motion impact as the drop touches the surface, a tiny splash and a small droplet bouncing back up.',
+        durationFrames: 48, // 2.0s
+        shotType: 'close_up',
+        transitionToNext: 'fade_through_gold',
+        continuityNote:
+          'Continuous golden-hour macro lighting & fluid physics → smooth fade through gold into Shot 3 (wide)',
+        environmentTheme: 'water_drop_macro',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'static',
+        foregroundProp: 'water_crown',
+        characterPlacements: [],
+        dialogues: [],
+      },
+      {
+        id: 'shot_water_3',
+        title: 'Shot 3: Top-Down Golden Ripples',
+        narrativeSummary:
+          'Top-down view of circular ripples spreading out evenly across the calm water.',
+        durationFrames: 72, // 3.0s
+        shotType: 'wide',
+        transitionToNext: 'fade_through_gold',
+        continuityNote:
+          'Continuous golden-hour macro lighting & fluid physics → smooth fade through gold into Shot 4 (medium)',
+        environmentTheme: 'water_drop_macro',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_out',
+        foregroundProp: 'water_ripples',
+        characterPlacements: [],
+        dialogues: [],
+      },
+      {
+        id: 'shot_water_4',
+        title: 'Shot 4: Mirror Sunset Stillness',
+        narrativeSummary:
+          'The ripples fade and the water returns to stillness, reflecting the soft sunset sky.',
+        durationFrames: 48, // 2.0s
+        shotType: 'medium',
+        transitionToNext: 'fade_through_gold',
+        continuityNote:
+          'Final medium shot fading to calm mirror reflection',
+        environmentTheme: 'water_drop_macro',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'static',
+        foregroundProp: 'water_still',
+        characterPlacements: [],
+        dialogues: [],
+      },
+    ],
+  },
+  {
+    id: 'preset_candy_shop',
+    title: 'Sweet Pastel Candy Shop',
+    prompt:
+      'A cheerful adult shopper walks into a colorful, cozy candy shop filled with glass jars of bright candies, lollipops, gummy bears, and chocolates on wooden shelves. They browse with a delighted smile, pick up a scoop, and fill a small paper bag with rainbow gummies. They walk to the counter, where a friendly shopkeeper weighs the bag and hands it over with a smile. The shopper pays, takes a candy from the bag, pops it in their mouth, and smiles happily.',
+    logline:
+      'A joyful 4-shot pastel sequence inside a cozy candy shop with ringing door chimes, rainbow gummy scooping, counter weighing, and a happy first taste.',
+    fps: 24,
+    width: 1280,
+    height: 720,
+    visualStyle: 'Playful Pastel Confectionery',
+    characters: [
+      {
+        id: 'char_1',
+        name: 'Shopper',
+        role: 'Cheerful Candy Shopper',
+        primaryColor: '#F472B6',
+        secondaryColor: '#38BDF8',
+        skinOrFurColor: '#FDE68A',
+        hairColor: '#451A03',
+        bodyType: 'humanoid',
+        accessory: 'scarf',
+      },
+      {
+        id: 'char_2',
+        name: 'Shopkeeper',
+        role: 'Friendly Candy Shopkeeper',
+        primaryColor: '#34D399',
+        secondaryColor: '#FBBF24',
+        skinOrFurColor: '#F5CBA7',
+        hairColor: '#78350F',
+        bodyType: 'humanoid',
+        accessory: 'glasses',
+      },
+    ],
+    scenes: [
+      {
+        id: 'shot_candy_1',
+        title: 'Shot 1: Wide Establishing Shot',
+        narrativeSummary:
+          'Wide shot of the shopper opening the door of a bright candy shop, a small bell ringing above the door.',
+        durationFrames: 72, // 3.0s
+        shotType: 'wide',
+        transitionToNext: 'cross_dissolve',
+        continuityNote:
+          'Locked character model sheet across all 4 shots · Smooth 12-frame cross-dissolve into Shot 2',
+        environmentTheme: 'candy_shop',
+        timeOfDay: 'day',
+        weatherEffect: 'clear',
+        cameraMotion: 'pan_right',
+        foregroundProp: 'candy_counter',
+        characterPlacements: [
+          {
+            characterId: 'char_1',
+            startX: 18,
+            startY: 74,
+            endX: 38,
+            endY: 74,
+            scale: 1.0,
+            action: 'enter_door',
+            expression: 'happy',
+            facing: 'right',
+          },
+          {
+            characterId: 'char_2',
+            startX: 68,
+            startY: 74,
+            endX: 68,
+            endY: 74,
+            scale: 1.0,
+            action: 'wave',
+            expression: 'happy',
+            facing: 'left',
+          },
+        ],
+        dialogues: [
+          {
+            id: 'dlg_candy_1',
+            characterId: 'char_2',
+            speakerName: 'Shopkeeper',
+            text: 'Welcome to the candy shop! Fresh rainbow gummies just arrived!',
+            startFrameOffset: 10,
+            durationFrames: 50,
+          },
+        ],
+      },
+      {
+        id: 'shot_candy_2',
+        title: 'Shot 2: Close-Up Detail Shot',
+        narrativeSummary:
+          'Close-up of their hand scooping colorful gummies from a glass jar into a paper bag.',
+        durationFrames: 72, // 3.0s
+        shotType: 'close_up',
+        transitionToNext: 'cross_dissolve',
+        continuityNote:
+          'Locked character model sheet across all 4 shots · Smooth 12-frame cross-dissolve into Shot 3',
+        environmentTheme: 'candy_shop',
+        timeOfDay: 'day',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_in',
+        foregroundProp: 'candy_jars',
+        characterPlacements: [
+          {
+            characterId: 'char_1',
+            startX: 44,
+            startY: 74,
+            endX: 46,
+            endY: 74,
+            scale: 1.0,
+            action: 'scoop_candy',
+            expression: 'excited',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+      {
+        id: 'shot_candy_3',
+        title: 'Shot 3: Medium Side Profile',
+        narrativeSummary:
+          'Medium shot at the counter as the shopkeeper weighs the bag and hands it over, both smiling.',
+        durationFrames: 96, // 4.0s
+        shotType: 'medium',
+        transitionToNext: 'cross_dissolve',
+        continuityNote:
+          'Locked character model sheet across all 4 shots · Smooth 12-frame cross-dissolve into Shot 4',
+        environmentTheme: 'candy_shop',
+        timeOfDay: 'day',
+        weatherEffect: 'clear',
+        cameraMotion: 'pan_right',
+        foregroundProp: 'candy_counter',
+        characterPlacements: [
+          {
+            characterId: 'char_1',
+            startX: 38,
+            startY: 74,
+            endX: 48,
+            endY: 74,
+            scale: 1.0,
+            action: 'weigh_and_hand',
+            expression: 'happy',
+            facing: 'right',
+          },
+          {
+            characterId: 'char_2',
+            startX: 66,
+            startY: 74,
+            endX: 64,
+            endY: 74,
+            scale: 1.0,
+            action: 'weigh_and_hand',
+            expression: 'happy',
+            facing: 'left',
+          },
+        ],
+        dialogues: [
+          {
+            id: 'dlg_candy_3',
+            characterId: 'char_2',
+            speakerName: 'Shopkeeper',
+            text: 'Right on the mark! Here is your bag of rainbow gummies!',
+            startFrameOffset: 12,
+            durationFrames: 64,
+          },
+        ],
+      },
+      {
+        id: 'shot_candy_4',
+        title: 'Shot 4: Close-Up Detail Shot',
+        narrativeSummary:
+          'Close-up of the shopper taking a rainbow gummy candy from the paper bag, popping it in their mouth, and smiling happily.',
+        durationFrames: 120, // 5.0s
+        shotType: 'close_up',
+        transitionToNext: 'fade_through_gold',
+        continuityNote:
+          'Final shot · Warm pastel bloom & gentle fade',
+        environmentTheme: 'candy_shop',
+        timeOfDay: 'day',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_in',
+        foregroundProp: 'candy_jars',
+        characterPlacements: [
+          {
+            characterId: 'char_1',
+            startX: 48,
+            startY: 74,
+            endX: 48,
+            endY: 74,
+            scale: 1.0,
+            action: 'eat_candy',
+            expression: 'happy',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+    ],
+  },
+  {
+    id: 'preset_golden_beach',
+    title: 'Golden Hour Shore',
+    prompt:
+      'A relaxed adult sits on a wooden beach lounger on a quiet tropical beach at golden hour. They wear a light linen shirt and sunglasses pushed up on their head. In one hand they hold a tall glass of iced drink with a lime slice, condensation dripping down the glass. They take a slow sip, lower the glass, and gaze peacefully at the sea with a soft, content smile. Gentle turquoise waves roll onto white sand, and a warm breeze moves their hair and the palm leaves overhead.',
+    logline:
+      'A calm, dreamy 4-shot golden-hour sequence on a quiet tropical beach with rolling turquoise waves, swaying palms, and an iced lime drink.',
+    fps: 24,
+    width: 1280,
+    height: 720,
+    visualStyle: 'Cinematic Golden Hour',
+    characters: [
+      {
+        id: 'char_kai',
+        name: 'Kai',
+        role: 'Beach Lounger',
+        primaryColor: '#F8FAFC',
+        secondaryColor: '#38BDF8',
+        skinOrFurColor: '#E5B887',
+        bodyType: 'humanoid',
+        accessory: 'glasses',
+      },
+    ],
+    scenes: [
+      {
+        id: 'shot_beach_1',
+        title: 'Shot 1: Wide Establishing Shot',
+        narrativeSummary:
+          'Wide shot of a calm tropical beach at sunset, gentle turquoise waves rolling in, a person relaxing on a wooden lounger in the distance.',
+        durationFrames: 96, // 4.0s
+        shotType: 'wide',
+        environmentTheme: 'tropical_beach',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_out',
+        foregroundProp: 'beach_lounger',
+        characterPlacements: [
+          {
+            characterId: 'char_kai',
+            startX: 46,
+            startY: 74,
+            endX: 46,
+            endY: 74,
+            scale: 1.0,
+            action: 'relax_lounger',
+            expression: 'happy',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+      {
+        id: 'shot_beach_2',
+        title: 'Shot 2: Close-Up Detail Shot',
+        narrativeSummary:
+          'Close-up of their hand lifting a tall glass of iced drink with a lime slice, condensation dripping down the glass, then taking a slow sip.',
+        durationFrames: 96, // 4.0s
+        shotType: 'close_up',
+        environmentTheme: 'tropical_beach',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'zoom_in',
+        foregroundProp: 'iced_drink',
+        characterPlacements: [
+          {
+            characterId: 'char_kai',
+            startX: 46,
+            startY: 74,
+            endX: 46,
+            endY: 74,
+            scale: 1.0,
+            action: 'sip_drink',
+            expression: 'happy',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+      {
+        id: 'shot_beach_3',
+        title: 'Shot 3: Medium Side Profile',
+        narrativeSummary:
+          'Medium shot from the side with a slow camera push-in as they lower the glass, exhale softly, and smile contentedly while watching the waves.',
+        durationFrames: 96, // 4.0s
+        shotType: 'medium',
+        environmentTheme: 'tropical_beach',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'dramatic_push',
+        foregroundProp: 'beach_lounger',
+        characterPlacements: [
+          {
+            characterId: 'char_kai',
+            startX: 46,
+            startY: 74,
+            endX: 46,
+            endY: 74,
+            scale: 1.0,
+            action: 'gaze_horizon',
+            expression: 'happy',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+      {
+        id: 'shot_beach_4',
+        title: 'Shot 4: Over-the-Shoulder Horizon',
+        narrativeSummary:
+          'Over-the-shoulder shot looking out at the glowing golden-hour sea and horizon, gentle breeze moving hair and palm leaves, slow fade.',
+        durationFrames: 72, // 3.0s
+        shotType: 'over_shoulder',
+        environmentTheme: 'tropical_beach',
+        timeOfDay: 'dusk',
+        weatherEffect: 'clear',
+        cameraMotion: 'static',
+        foregroundProp: 'beach_lounger',
+        characterPlacements: [
+          {
+            characterId: 'char_kai',
+            startX: 46,
+            startY: 74,
+            endX: 46,
+            endY: 74,
+            scale: 1.0,
+            action: 'gaze_horizon',
+            expression: 'happy',
+            facing: 'right',
+          },
+        ],
+        dialogues: [],
+      },
+    ],
+  },
+  {
     id: 'preset_spore9',
     title: 'Echoes of Spore-9',
     prompt:

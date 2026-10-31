@@ -2,5 +2,7 @@
   "name": "CelFrame 24 — AI Storyboard & 24 FPS Animation Studio",
   "description": "Transform text stories and scripts into frame-accurate 24 FPS animated videos with AI storyboarding, procedural 2D character rigs, interactive timeline scrubbing, and video export.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

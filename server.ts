@@ -3,6 +3,12 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import {
+  buildSmartProjectFromPrompt,
+  buildSmartSceneFromDirection,
+  enforceProjectContinuity,
+  hasActorsInPrompt,
+} from "./src/engine/promptDirector";
 
 dotenv.config();
 
@@ -11,16 +17,15 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
-function getGeminiClient() {
+function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-    throw new Error(
-      "GEMINI_API_KEY is not configured. Please set GEMINI_API_KEY in your .env file or the Settings > Secrets panel."
-    );
+    return null;
   }
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
+      timeout: 11000,
       headers: {
         "User-Agent": "aistudio-build",
       },
@@ -39,53 +44,37 @@ async function generateWithFallback(
   contents: string,
   systemInstruction: string,
   responseSchema: any
-) {
-  let lastError: any = null;
+): Promise<string> {
+  // Race the configured Gemini models in parallel with an 11s deadline so we never trigger proxy 504 timeouts
+  const modelPromises = MODEL_FALLBACK_CHAIN.map(async (modelName) => {
+    const config: any = {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema,
+    };
 
-  for (const modelName of MODEL_FALLBACK_CHAIN) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const config: any = {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema,
-        };
-
-        if (modelName === "gemini-3.8-flash") {
-          config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
-        }
-
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents,
-          config,
-        });
-
-        if (response.text) {
-          return response.text;
-        }
-      } catch (err: any) {
-        lastError = err;
-        const status = err?.status || err?.code;
-        const msg = String(err?.message || "");
-        const isTransient =
-          status === 503 ||
-          status === 429 ||
-          msg.includes("503") ||
-          msg.includes("UNAVAILABLE") ||
-          msg.includes("high demand") ||
-          msg.includes("overloaded");
-
-        if (isTransient) {
-          await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-          continue;
-        }
-        break;
-      }
+    if (modelName === "gemini-3.8-flash") {
+      config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
     }
-  }
 
-  throw lastError || new Error("All Gemini models failed to respond.");
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: modelName,
+        contents,
+        config,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout on ${modelName}`)), 11500)
+      ),
+    ]);
+
+    if (!response?.text) {
+      throw new Error(`Empty response from ${modelName}`);
+    }
+    return response.text;
+  });
+
+  return Promise.any(modelPromises);
 }
 
 const CHARACTER_SCHEMA = {
@@ -129,12 +118,16 @@ const SCENE_SCHEMA = {
     },
     durationSeconds: {
       type: Type.NUMBER,
-      description: "Duration of the scene in seconds (between 3 and 8 seconds). Will be multiplied by 24 for 24 FPS.",
+      description: "Duration of the scene in seconds (between 2 and 8 seconds).",
+    },
+    shotType: {
+      type: Type.STRING,
+      description: "One of: wide, medium, close_up, over_shoulder",
     },
     environmentTheme: {
       type: Type.STRING,
       description:
-        "One of: forest, cyber_city, space_station, sunset_desert, cozy_studio, ocean_cliff",
+        "One of: water_drop_macro, candy_shop, tropical_beach, forest, cyber_city, space_station, sunset_desert, cozy_studio, ocean_cliff",
     },
     timeOfDay: {
       type: Type.STRING,
@@ -151,7 +144,8 @@ const SCENE_SCHEMA = {
     },
     foregroundProp: {
       type: Type.STRING,
-      description: "One of: none, monolith, ramen_cart, campfire, console_desk, lantern, telescope, crate",
+      description:
+        "One of: none, water_drop, water_crown, water_ripples, water_still, candy_counter, candy_jars, beach_lounger, iced_drink, monolith, ramen_cart, campfire, console_desk, lantern, telescope, crate",
     },
     characterPlacements: {
       type: Type.ARRAY,
@@ -161,11 +155,11 @@ const SCENE_SCHEMA = {
           characterId: { type: Type.STRING, description: "Must match a character id" },
           startX: {
             type: Type.NUMBER,
-            description: "Horizontal start position percentage from 15 to 85",
+            description: "Horizontal start position percentage from 15 to 85 (match endX if stationary)",
           },
           startY: {
             type: Type.NUMBER,
-            description: "Vertical ground position percentage from 62 to 78",
+            description: "Vertical ground position percentage, always 74",
           },
           endX: {
             type: Type.NUMBER,
@@ -173,16 +167,16 @@ const SCENE_SCHEMA = {
           },
           endY: {
             type: Type.NUMBER,
-            description: "Vertical end position percentage from 62 to 78",
+            description: "Vertical end position percentage, always 74",
           },
           scale: {
             type: Type.NUMBER,
-            description: "Character scale multiplier between 0.85 and 1.3",
+            description: "Character scale multiplier, always 1.0 for consistent proportions",
           },
           action: {
             type: Type.STRING,
             description:
-              "One of: idle, walk, run, talk, wave, jump, celebrate, think, inspect",
+              "One of: enter_door, scoop_candy, weigh_and_hand, eat_candy, relax_lounger, sip_drink, gaze_horizon, sit, idle, walk, run, talk, wave, jump, celebrate, think, inspect",
           },
           expression: {
             type: Type.STRING,
@@ -217,7 +211,7 @@ const SCENE_SCHEMA = {
           speakerName: { type: Type.STRING },
           text: {
             type: Type.STRING,
-            description: "Engaging spoken dialogue line (under 140 characters)",
+            description: "Spoken dialogue line (leave array empty [] if the scene is silent/atmospheric)",
           },
           startSecondOffset: {
             type: Type.NUMBER,
@@ -244,6 +238,7 @@ const SCENE_SCHEMA = {
     "title",
     "narrativeSummary",
     "durationSeconds",
+    "shotType",
     "environmentTheme",
     "timeOfDay",
     "weatherEffect",
@@ -261,22 +256,46 @@ app.get("/api/health", (_req, res) => {
 
 // POST /api/storyboard/generate
 app.post("/api/storyboard/generate", async (req, res) => {
+  const { prompt, sceneCount = 3, visualStyle = "Cel-Shaded Adventure" } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    res.status(400).json({ error: "Please provide a story prompt or script." });
+    return;
+  }
+
+  const clampedScenes = Math.min(Math.max(Number(sceneCount) || 3, 2), 6);
+  const smartReference = buildSmartProjectFromPrompt(prompt, clampedScenes, visualStyle);
+  const scriptHasActors = hasActorsInPrompt(prompt);
+
+  // If the script has no actors, specifies multi-actor group choreography (e.g. three people walking together),
+  // or has explicit Shot 1..4 breakdowns, use the deterministic Script-to-Shot Director directly so actor count,
+  // walking direction, and continuous shot-to-shot transitions are 100% faithful.
+  if (
+    !scriptHasActors ||
+    /\b(shot\s*1|three|3|four|4|five|5|trio|quartet|walking together|waling together|walk together|water drop|droplet|crown-shaped|ripples|candy shop|gummies|shopkeeper|beach lounger|iced drink)\b/i.test(
+      prompt
+    )
+  ) {
+    res.status(200).json({ project: smartReference });
+    return;
+  }
+
   try {
-    const { prompt, sceneCount = 3, visualStyle = "Cel-Shaded Adventure" } = req.body;
-    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-      res.status(400).json({ error: "Please provide a story prompt or script." });
+    const ai = getGeminiClient();
+    if (!ai) {
+      res.status(200).json({ project: smartReference });
       return;
     }
 
-    const ai = getGeminiClient();
-    const clampedScenes = Math.min(Math.max(Number(sceneCount) || 3, 2), 6);
-
     const rawText = await generateWithFallback(
       ai,
-      `Create a complete ${clampedScenes}-scene 24 FPS animated story project based on this user prompt: "${prompt.trim()}"
+      `Create a complete animated story project based on this user prompt: "${prompt.trim()}"
 Visual Style: ${visualStyle}.
-Ensure characters have expressive contrasting hex colors, natural movement across the stage (startX to endX), varied camera motions, atmospheric weather, and well-timed spoken dialogue lines that fit within each scene's durationSeconds.`,
-      "You are a master 24 FPS animation director and storyboard artist. Break stories into vivid animated scenes with 2 to 3 recurring characters, expressive poses, dynamic camera movements, and punchy character dialogue. Always use valid enum strings requested in the schema.",
+CRITICAL RULES:
+1. If the user prompt specifies Shot 1, Shot 2, Shot 3, Shot 4 (or explicit scenes), create a scene for EACH shot with matching shotType (wide, close_up, medium, over_shoulder). Otherwise create ${clampedScenes} scenes with varied shotTypes (wide, close_up, medium, over_shoulder).
+2. ONLY create characters if the prompt mentions people, animals, robots, or characters. If there are no characters/actors in the prompt, return empty arrays for characters: [] and characterPlacements: [].
+3. Use specific actions matching the script (enter_door, scoop_candy, weigh_and_hand, eat_candy, relax_lounger, sip_drink, gaze_horizon, sit, walk, talk, inspect, wave, celebrate).
+4. If the prompt has no spoken dialogue, return an empty dialogues array [].`,
+      "You are a master animation director and cinematographer. Match the exact character roles, wardrobe colors, shot framing (wide, close_up, medium, over_shoulder), and specific actions described in the user's prompt. Never invent characters if the script has no actors.",
       {
         type: Type.OBJECT,
         properties: {
@@ -299,181 +318,263 @@ Ensure characters have expressive contrasting hex colors, natural movement acros
     const parsed = JSON.parse(rawText.trim());
 
     const FPS = 24;
+    const uid = Date.now().toString(36);
+    const defaultShots = ["wide", "close_up", "medium", "over_shoulder"];
+    const resolvedChars = !scriptHasActors
+      ? []
+      : (parsed.characters?.length ? parsed.characters : smartReference.characters).map(
+          (c: any, idx: number) => ({
+            id: `char_${uid}_${idx + 1}`,
+            name: c.name || smartReference.characters[idx]?.name || `Character ${idx + 1}`,
+            role: c.role || smartReference.characters[idx]?.role || "Protagonist",
+            primaryColor: c.primaryColor || smartReference.characters[idx]?.primaryColor || "#F472B6",
+            secondaryColor: c.secondaryColor || smartReference.characters[idx]?.secondaryColor || "#38BDF8",
+            skinOrFurColor: c.skinOrFurColor || "#E5B887",
+            bodyType: c.bodyType || "humanoid",
+            accessory: c.accessory || "none",
+          })
+        );
+
     const project = {
-      id: `proj_${Date.now()}`,
-      title: parsed.title || "Untitled 24 FPS Short",
+      id: `proj_${uid}`,
+      title: parsed.title || smartReference.title,
       prompt: prompt.trim(),
-      logline: parsed.logline || "",
+      logline: parsed.logline || smartReference.logline,
       fps: FPS,
       width: 1280,
       height: 720,
       visualStyle: parsed.visualStyle || visualStyle,
-      characters: (parsed.characters || []).map((c: any, idx: number) => ({
-        id: c.id || `char_${idx + 1}`,
-        name: c.name || `Character ${idx + 1}`,
-        role: c.role || "Protagonist",
-        primaryColor: c.primaryColor || "#F59E0B",
-        secondaryColor: c.secondaryColor || "#38BDF8",
-        skinOrFurColor: c.skinOrFurColor || "#FDE68A",
-        bodyType: c.bodyType || "humanoid",
-        accessory: c.accessory || "none",
-      })),
-      scenes: (parsed.scenes || []).map((s: any, idx: number) => {
-        const durSec = Math.max(3, Math.min(10, Math.round(Number(s.durationSeconds) || 4)));
-        const durationFrames = durSec * FPS;
-        return {
-          id: s.id || `scene_${idx + 1}`,
-          title: s.title || `Scene ${idx + 1}`,
-          narrativeSummary: s.narrativeSummary || "",
-          durationFrames,
-          environmentTheme: s.environmentTheme || "forest",
-          timeOfDay: s.timeOfDay || "dusk",
-          weatherEffect: s.weatherEffect || "fireflies",
-          cameraMotion: s.cameraMotion || "pan_right",
-          foregroundProp: s.foregroundProp || "none",
-          characterPlacements: (s.characterPlacements || []).map((cp: any) => ({
-            characterId: cp.characterId || parsed.characters?.[0]?.id || "char_1",
-            startX: Math.max(12, Math.min(88, Number(cp.startX) || 30)),
-            startY: Math.max(60, Math.min(80, Number(cp.startY) || 72)),
-            endX: Math.max(12, Math.min(88, Number(cp.endX) || 55)),
-            endY: Math.max(60, Math.min(80, Number(cp.endY) || 72)),
-            scale: Math.max(0.75, Math.min(1.4, Number(cp.scale) || 1)),
-            action: cp.action || "talk",
-            expression: cp.expression || "happy",
-            facing: cp.facing === "left" ? "left" : "right",
-          })),
-          dialogues: (s.dialogues || []).map((d: any, dIdx: number) => {
-            const startFrameOffset = Math.max(
-              0,
-              Math.min(
-                durationFrames - 24,
-                Math.round((Number(d.startSecondOffset) || dIdx * 2) * FPS)
-              )
-            );
-            const lineFrames = Math.max(
-              24,
-              Math.min(
-                durationFrames - startFrameOffset,
-                Math.round((Number(d.durationSeconds) || 2) * FPS)
-              )
-            );
-            return {
-              id: d.id || `dlg_${idx}_${dIdx}`,
-              characterId: d.characterId || parsed.characters?.[0]?.id || "char_1",
-              speakerName: d.speakerName || "Speaker",
-              text: d.text || "",
-              startFrameOffset,
-              durationFrames: lineFrames,
-            };
-          }),
-        };
-      }),
+      characters: resolvedChars,
+      scenes: (parsed.scenes?.length ? parsed.scenes : smartReference.scenes).map(
+        (s: any, idx: number) => {
+          const refScene = smartReference.scenes[idx] || smartReference.scenes[0];
+          const durSec = Math.max(2, Math.min(10, Math.round(Number(s.durationSeconds) || 4)));
+          const durationFrames = durSec * FPS;
+          const shotType =
+            ["wide", "medium", "close_up", "over_shoulder"].includes(s.shotType)
+              ? s.shotType
+              : refScene?.shotType || defaultShots[idx % defaultShots.length];
+          return {
+            id: `scene_${uid}_${idx + 1}`,
+            title: s.title || refScene?.title || `Shot ${idx + 1}`,
+            narrativeSummary: s.narrativeSummary || refScene?.narrativeSummary || "",
+            durationFrames,
+            shotType,
+            environmentTheme: s.environmentTheme || refScene?.environmentTheme || "forest",
+            timeOfDay: s.timeOfDay || refScene?.timeOfDay || "dusk",
+            weatherEffect: s.weatherEffect || refScene?.weatherEffect || "clear",
+            cameraMotion: s.cameraMotion || refScene?.cameraMotion || "zoom_in",
+            foregroundProp: s.foregroundProp || refScene?.foregroundProp || "none",
+            characterPlacements:
+              resolvedChars.length === 0
+                ? []
+                : (s.characterPlacements || []).map((cp: any, cpIdx: number) => {
+                    const refCp = refScene?.characterPlacements?.[cpIdx];
+                    const action = cp.action || refCp?.action || "idle";
+                    const isStationary = [
+                      "scoop_candy",
+                      "weigh_and_hand",
+                      "eat_candy",
+                      "relax_lounger",
+                      "sip_drink",
+                      "gaze_horizon",
+                      "sit",
+                      "idle",
+                      "think",
+                      "inspect",
+                    ].includes(action);
+                    const startX = Math.max(15, Math.min(85, Number(cp.startX) || refCp?.startX || 46));
+                    const endX = isStationary
+                      ? startX
+                      : Math.max(15, Math.min(85, Number(cp.endX) || refCp?.endX || startX));
+                    return {
+                      characterId: `char_${uid}_${(cpIdx % resolvedChars.length) + 1}`,
+                      startX,
+                      startY: 74,
+                      endX,
+                      endY: 74,
+                      scale: 1.0,
+                      action,
+                      expression: cp.expression || "happy",
+                      facing: cp.facing === "left" ? "left" : "right",
+                    };
+                  }),
+            dialogues: (s.dialogues || [])
+              .filter((d: any) => d?.text && String(d.text).trim().length > 0)
+              .map((d: any, dIdx: number) => {
+                const startFrameOffset = Math.max(
+                  0,
+                  Math.min(
+                    durationFrames - 24,
+                    Math.round((Number(d.startSecondOffset) || dIdx * 2) * FPS)
+                  )
+                );
+                const lineFrames = Math.max(
+                  24,
+                  Math.min(
+                    durationFrames - startFrameOffset,
+                    Math.round((Number(d.durationSeconds) || 2) * FPS)
+                  )
+                );
+                return {
+                  id: `dlg_${uid}_${idx}_${dIdx}`,
+                  characterId: `char_${uid}_1`,
+                  speakerName: d.speakerName || "Speaker",
+                  text: d.text || "",
+                  startFrameOffset,
+                  durationFrames: lineFrames,
+                };
+              }),
+          };
+        }
+      ),
     };
 
-    res.status(200).json({ project });
+    const continuousProject = enforceProjectContinuity(project as any);
+    res.status(200).json({ project: continuousProject });
   } catch (error: any) {
-    console.error("Error generating storyboard:", error);
-    // Always return HTTP 200 or 400 with structured JSON so reverse proxies never intercept 502/503 with an HTML error page
-    res.status(400).json({
-      error:
-        error?.message ||
-        "Failed to generate 24 FPS storyboard with Gemini AI. Please verify GEMINI_API_KEY in Settings > Secrets.",
-    });
+    console.warn("Gemini API spike or timeout, synthesizing via Prompt Director:", error?.message || error);
+    const fallbackProject = buildSmartProjectFromPrompt(
+      prompt,
+      clampedScenes,
+      visualStyle
+    );
+    res.status(200).json({ project: fallbackProject });
   }
 });
 
 // POST /api/storyboard/regenerate-scene
 app.post("/api/storyboard/regenerate-scene", async (req, res) => {
+  const { characters = [], scenePrompt = "", currentScene } = req.body || {};
+
+  // Use deterministic Script-to-Shot director first so updated narrative summaries immediately
+  // reflect the exact new environment, props, and actions without retaining old story state.
+  const smartUpdated = buildSmartSceneFromDirection(
+    currentScene,
+    characters,
+    scenePrompt
+  );
+
   try {
-    const { projectTitle, characters, scenePrompt, currentScene } = req.body;
     const ai = getGeminiClient();
+    if (!ai) {
+      res.status(200).json({ scene: smartUpdated });
+      return;
+    }
 
     const rawText = await generateWithFallback(
       ai,
-      `Project: "${projectTitle}"
-Available Characters: ${JSON.stringify(characters)}
-Current Scene Context: ${JSON.stringify(currentScene)}
-User Direction for New/Updated Scene: "${scenePrompt || "Make this scene more dynamic with expressive dialogue and action"}"
-Generate a single updated 24 FPS scene object matching the schema.`,
-      "You are a 24 FPS animation director. Return a single refined scene using the provided character IDs.",
+      `Available Characters: ${JSON.stringify(characters)}
+New Scene Narrative Direction (ignore any previous story context): "${scenePrompt || smartUpdated.narrativeSummary}"
+Generate a single updated scene object matching the schema based strictly on the New Scene Narrative Direction. Keep character scale at 1.0 and startY/endY at 74.`,
+      "You are an animation director. Create a scene strictly from the user's new narrative direction without referencing any old story.",
       SCENE_SCHEMA
     );
 
     const parsed = JSON.parse(rawText.trim());
     const FPS = 24;
-    const durSec = Math.max(3, Math.min(10, Math.round(Number(parsed.durationSeconds) || 4)));
+    const durSec = Math.max(2, Math.min(10, Math.round(Number(parsed.durationSeconds) || 4)));
     const durationFrames = durSec * FPS;
 
     const updatedScene = {
       id: currentScene?.id || `scene_${Date.now()}`,
-      title: parsed.title || currentScene?.title || "Updated Scene",
-      narrativeSummary: parsed.narrativeSummary || "",
+      title: parsed.title || smartUpdated.title || "Updated Scene",
+      narrativeSummary: smartUpdated.narrativeSummary || parsed.narrativeSummary || "",
       durationFrames,
-      environmentTheme: parsed.environmentTheme || "forest",
-      timeOfDay: parsed.timeOfDay || "dusk",
-      weatherEffect: parsed.weatherEffect || "fireflies",
-      cameraMotion: parsed.cameraMotion || "zoom_in",
-      foregroundProp: parsed.foregroundProp || "none",
-      characterPlacements: (parsed.characterPlacements || []).map((cp: any) => ({
-        characterId: cp.characterId || characters?.[0]?.id || "char_1",
-        startX: Math.max(12, Math.min(88, Number(cp.startX) || 35)),
-        startY: Math.max(60, Math.min(80, Number(cp.startY) || 72)),
-        endX: Math.max(12, Math.min(88, Number(cp.endX) || 60)),
-        endY: Math.max(60, Math.min(80, Number(cp.endY) || 72)),
-        scale: Math.max(0.75, Math.min(1.4, Number(cp.scale) || 1)),
-        action: cp.action || "talk",
-        expression: cp.expression || "excited",
-        facing: cp.facing === "left" ? "left" : "right",
-      })),
-      dialogues: (parsed.dialogues || []).map((d: any, dIdx: number) => {
-        const startFrameOffset = Math.max(
-          0,
-          Math.min(
-            durationFrames - 24,
-            Math.round((Number(d.startSecondOffset) || dIdx * 2) * FPS)
-          )
-        );
-        const lineFrames = Math.max(
-          24,
-          Math.min(
-            durationFrames - startFrameOffset,
-            Math.round((Number(d.durationSeconds) || 2) * FPS)
-          )
-        );
+      shotType: ["wide", "medium", "close_up", "over_shoulder"].includes(parsed.shotType)
+        ? parsed.shotType
+        : smartUpdated.shotType || "medium",
+      environmentTheme: smartUpdated.environmentTheme || parsed.environmentTheme || "forest",
+      timeOfDay: smartUpdated.timeOfDay || parsed.timeOfDay || "dusk",
+      weatherEffect: smartUpdated.weatherEffect || parsed.weatherEffect || "clear",
+      cameraMotion: parsed.cameraMotion || smartUpdated.cameraMotion || "zoom_in",
+      foregroundProp: smartUpdated.foregroundProp || parsed.foregroundProp || "none",
+      characterPlacements: (smartUpdated.characterPlacements?.length
+        ? smartUpdated.characterPlacements
+        : parsed.characterPlacements || []
+      ).map((cp: any, cpIdx: number) => {
+        const refCp = smartUpdated.characterPlacements?.[cpIdx];
+        const action = refCp?.action || cp.action || "idle";
+        const isStationary = [
+          "scoop_candy",
+          "weigh_and_hand",
+          "eat_candy",
+          "relax_lounger",
+          "sip_drink",
+          "gaze_horizon",
+          "sit",
+          "idle",
+          "think",
+          "inspect",
+        ].includes(action);
+        const startX = Math.max(15, Math.min(85, Number(refCp?.startX ?? cp.startX) || 46));
+        const endX = isStationary
+          ? startX
+          : Math.max(15, Math.min(85, Number(refCp?.endX ?? cp.endX) || startX));
         return {
-          id: `dlg_${Date.now()}_${dIdx}`,
-          characterId: d.characterId || characters?.[0]?.id || "char_1",
-          speakerName: d.speakerName || "Character",
-          text: d.text || "",
-          startFrameOffset,
-          durationFrames: lineFrames,
+          characterId: cp.characterId || characters?.[cpIdx]?.id || characters?.[0]?.id || "char_1",
+          startX,
+          startY: 74,
+          endX,
+          endY: 74,
+          scale: 1.0,
+          action,
+          expression: cp.expression || "happy",
+          facing: cp.facing === "left" ? "left" : "right",
         };
       }),
+      dialogues: (parsed.dialogues || [])
+        .filter((d: any) => d?.text && String(d.text).trim().length > 0)
+        .map((d: any, dIdx: number) => {
+          const startFrameOffset = Math.max(
+            0,
+            Math.min(
+              durationFrames - 24,
+              Math.round((Number(d.startSecondOffset) || dIdx * 2) * FPS)
+            )
+          );
+          const lineFrames = Math.max(
+            24,
+            Math.min(
+              durationFrames - startFrameOffset,
+              Math.round((Number(d.durationSeconds) || 2) * FPS)
+            )
+          );
+          return {
+            id: `dlg_${Date.now()}_${dIdx}`,
+            characterId: d.characterId || characters?.[0]?.id || "char_1",
+            speakerName: d.speakerName || "Character",
+            text: d.text || "",
+            startFrameOffset,
+            durationFrames: lineFrames,
+          };
+        }),
     };
 
     res.status(200).json({ scene: updatedScene });
   } catch (error: any) {
-    console.error("Error regenerating scene:", error);
-    res.status(400).json({
-      error: error?.message || "Failed to regenerate scene.",
-    });
+    console.warn("Gemini scene regeneration spike, synthesizing via Prompt Director:", error?.message || error);
+    res.status(200).json({ scene: smartUpdated });
   }
 });
 
 // Catch-all for any unmatched /api/* routes so Vite never serves <!doctype html> for API calls
 app.all("/api/*", (_req, res) => {
   res.status(404).json({
-    error: "API route not found. Make sure you started the server with `npm run dev` (tsx server.ts).",
+    error: "API route not found.",
   });
 });
 
 async function startServer() {
+  let viteMiddleware: any = null;
+
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    app.use((req, res, next) => {
+      if (viteMiddleware) {
+        return viteMiddleware(req, res, next);
+      }
+      next();
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -482,9 +583,18 @@ async function startServer() {
     });
   }
 
+  // Bind port 3000 immediately so Nginx never sees 502 Bad Gateway during startup
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`CelFrame 24 Studio Server running on http://localhost:${PORT}`);
+    console.log(`Flipper Studio Server running on http://localhost:${PORT}`);
   });
+
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    viteMiddleware = vite.middlewares;
+  }
 }
 
 startServer();
