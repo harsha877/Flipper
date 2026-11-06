@@ -5,8 +5,10 @@ import {
   Download,
   FileText,
   FolderOpen,
+  KeyRound,
   Link2,
   Plus,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Wand2,
@@ -18,6 +20,7 @@ import {
   serializeAffiliateLinksToTxt,
   serializePageToTxt,
 } from '../utils/flatFileEngine';
+import { encryptCreatorVault } from '../utils/cryptoAuth';
 
 interface PageBuilderStudioProps {
   pages: RetundaPage[];
@@ -154,9 +157,14 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
   onSaveQuickLinksPreview,
   onOpenPage,
 }) => {
-  const [studioTab, setStudioTab] = useState<'page-builder' | 'quick-links' | 'file-inspector'>(
-    'page-builder'
+  const [studioTab, setStudioTab] = useState<
+    'page-builder' | 'quick-links' | 'file-inspector' | 'security-vault'
+  >('page-builder');
+  const [newVaultPassword, setNewVaultPassword] = useState('');
+  const [generatedVaultToken, setGeneratedVaultToken] = useState<string | null>(
+    null
   );
+  const [copiedVault, setCopiedVault] = useState(false);
 
   const [title, setTitle] = useState(
     initialEditPage?.title || '5 Warm Minimalist Entryway Console Finds on Amazon'
@@ -405,7 +413,17 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
                 : 'text-[#57534E] hover:text-[#1C1917]'
             }`}
           >
-            3. Folder Inspector ({pages.length} Pages)
+            3. Folder ({pages.length})
+          </button>
+          <button
+            onClick={() => setStudioTab('security-vault')}
+            className={`px-4 py-2.5 text-xs font-mono uppercase tracking-wider cursor-pointer transition-colors ${
+              studioTab === 'security-vault'
+                ? 'bg-[#1C1917] text-[#FAF9F6]'
+                : 'text-[#57534E] hover:text-[#1C1917]'
+            }`}
+          >
+            4. Security Vault
           </button>
         </div>
       </div>
@@ -975,6 +993,84 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
           </div>
         </div>
       )}
+
+      {studioTab === 'security-vault' && (
+        <div className="mt-8 max-w-3xl space-y-6">
+          <div className="bg-[#F3F1EC] border border-[#E7E5E0] p-6 sm:p-8 space-y-5">
+            <div className="flex items-center gap-2 text-[#B45309] font-mono text-xs uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4" />
+              Zero-Plaintext Password Vault Generator (PBKDF2 + AES-256-GCM)
+            </div>
+
+            <h2 className="font-serif-display text-2xl font-semibold text-[#1C1917]">
+              Encrypt a New Creator Password
+            </h2>
+
+            <p className="text-sm text-[#57534E] leading-relaxed">
+              Your password is never stored in plain text. Type any new password below to encrypt a verification payload using <strong>100,000 iterations of PBKDF2-SHA256 + AES-256-GCM</strong>. Then paste the resulting <code className="font-mono text-xs text-[#1C1917]">ADMIN_VAULT</code> line into <code className="font-mono text-xs text-[#1C1917]">src/content/site-config.txt</code>.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <KeyRound className="w-4 h-4 text-[#57534E] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  value={newVaultPassword}
+                  onChange={(e) => setNewVaultPassword(e.target.value)}
+                  placeholder="Enter new creator password..."
+                  className="w-full bg-[#FAF9F6] border border-[#E7E5E0] pl-9 pr-3 py-2.5 font-mono text-sm text-[#1C1917] focus:outline-none focus:border-[#1C1917]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!newVaultPassword.trim()) return;
+                  const res = await encryptCreatorVault(newVaultPassword.trim());
+                  setGeneratedVaultToken(res.token);
+                }}
+                className="bg-[#1C1917] text-[#FAF9F6] px-5 py-2.5 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors cursor-pointer shrink-0"
+              >
+                Encrypt New Vault Token
+              </button>
+            </div>
+
+            {generatedVaultToken && (
+              <div className="bg-[#FAF9F6] border border-[#E7E5E0] p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs uppercase text-[#B45309] font-semibold">
+                    Paste this line into src/content/site-config.txt:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `ADMIN_VAULT: ${generatedVaultToken}`
+                      );
+                      setCopiedVault(true);
+                      setTimeout(() => setCopiedVault(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 font-mono text-xs text-[#1C1917] hover:text-[#B45309] cursor-pointer"
+                  >
+                    {copiedVault ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[#15803D]" /> Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy Line
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="font-mono text-xs text-[#1C1917] break-all whitespace-pre-wrap bg-[#F3F1EC] p-3 border border-[#E7E5E0]">
+                  {`ADMIN_VAULT: ${generatedVaultToken}`}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

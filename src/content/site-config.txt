@@ -2,7 +2,11 @@
 # RETUNDA — GLOBAL SITE CONFIGURATION (PLAIN TEXT FILE)
 # Edit any value below. Every Amazon link across your website automatically
 # attaches your AMAZON_TAG so you earn commissions on every click.
-# To access the hidden Creator Studio, visit: ?admin=retunda
+#
+# SECURITY: Your creator password is NEVER stored in plain text.
+# ADMIN_VAULT stores an AES-256-GCM + PBKDF2 encrypted ciphertext blob.
+# You can generate a new ADMIN_VAULT token for a new password anytime inside
+# the unlocked Creator Studio -> Security Vault tab.
 # ============================================================================
 
 SITE_NAME: Retunda
@@ -12,4 +16,4 @@ AMAZON_TAG: retunda-20
 PINTEREST_PROFILE: https://www.pinterest.com/retunda
 INSTAGRAM_URL: https://www.instagram.com/retunda
 ADMIN_KEY: retunda
-ADMIN_PASSCODE: retunda2026
+ADMIN_VAULT: v1:9AOhaHdO5kvqZ7z4oVv5rg==:237NxWfamAZ6XksD:7M3UG+BcaX4pmQBj0c4An1kl1/f2gtbehZaOLVhzRvyvFf27/TA1KSUY3ajtnlmYZQKu0xoGOwI=

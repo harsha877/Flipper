@@ -7,7 +7,7 @@ export interface SiteConfig {
   instagramUrl: string;
   ftcDisclosure: string;
   adminKey: string;
-  adminPasscode: string;
+  adminVault: string;
 }
 
 export interface AffiliateProduct {
@@ -106,9 +106,6 @@ function parseKeyValueLines(block: string): Record<string, string> {
 
 export function parseSiteConfig(rawText: string): SiteConfig {
   const map = parseKeyValueLines(rawText);
-  const envPasscode =
-    (import.meta as unknown as { env?: Record<string, string> }).env
-      ?.VITE_ADMIN_PASSCODE || '';
   return {
     siteName: map['SITE_NAME'] || 'Retunda',
     tagline: map['TAGLINE'] || 'Curated Home, Lifestyle & Aesthetic Finds',
@@ -120,7 +117,9 @@ export function parseSiteConfig(rawText: string): SiteConfig {
     instagramUrl: map['INSTAGRAM_URL'] || 'https://www.instagram.com/retunda',
     ftcDisclosure: map['FTC_DISCLOSURE'] || '',
     adminKey: map['ADMIN_KEY'] || 'retunda',
-    adminPasscode: envPasscode || map['ADMIN_PASSCODE'] || 'retunda2026',
+    adminVault:
+      map['ADMIN_VAULT'] ||
+      'v1:9AOhaHdO5kvqZ7z4oVv5rg==:237NxWfamAZ6XksD:7M3UG+BcaX4pmQBj0c4An1kl1/f2gtbehZaOLVhzRvyvFf27/TA1KSUY3ajtnlmYZQKu0xoGOwI=',
   };
 }
 

@@ -1,6 +1,6 @@
 {
-  "summary": "Updated implementation plan for Retunda to hide all page builder, Pin generator, file paths, and Amazon tag controls behind a secret URL query key (?admin=retunda) and passcode gate while keeping all pages and affiliate links in src/content/ flat text files.",
-  "updatedAt": "2026-11-06T04:50:14.843374644Z",
+  "summary": "Updated implementation plan replacing plaintext ADMIN_PASSCODE in site-config.txt with Web Crypto API PBKDF2 + AES-256-GCM authenticated decryption so the creator password is never stored in code or the client bundle.",
+  "updatedAt": "2026-11-06T04:58:32.438773407Z",
   "requestFeedback": true,
   "userFacing": true
 }

@@ -1072,7 +1072,7 @@ export function App() {
       {/* Secret Creator Passcode Gate Modal */}
       {showPasscodeModal && (
         <AdminPasscodeModal
-          expectedPasscode={initialBundle.config.adminPasscode}
+          vaultToken={initialBundle.config.adminVault}
           onSuccess={handleUnlockSuccess}
           onClose={() => setShowPasscodeModal(false)}
         />
