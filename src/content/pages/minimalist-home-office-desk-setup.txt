@@ -1,0 +1,50 @@
+TITLE: The Calm Desk Setup: 5 Walnut & Brass Workspace Essentials
+SLUG: minimalist-home-office-desk-setup
+CATEGORY: Workspace
+DATE: 2026-11-03
+READ_TIME: 2 min read
+HERO_IMAGE: https://images.unsplash.com/photo-1593062096033-9a26b09da705?auto=format&fit=crop&w=1400&q=85
+SUMMARY: Replace cold tech plastic with oiled American walnut, merino wool felt pads, and glare-free task lighting.
+PIN_TITLE: 5 Minimalist Walnut & Brass Desk Setup Finds on Amazon
+PIN_DESCRIPTION: Build a calm, productive home office desk setup with these 5 warm minimalist workspace essentials from Amazon. Solid walnut monitor shelf, merino wool desk mat, and cordless brass lighting.
+PIN_BOARD: Minimalist Home Office & Desk Setup
+
+--- PRODUCT ---
+NAME: Solid American Walnut Desk Shelf & Dual Monitor Stand
+PRICE: $89.00
+BADGE: Desk Anchor
+IMAGE: https://images.unsplash.com/photo-1593062096033-9a26b09da705?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09WLNT310?tag=retunda-20
+VERDICT: Creates a two-tier architectural cockpit that hides charging cables and elevates displays to eye level.
+
+--- PRODUCT ---
+NAME: Charcoal Merino Wool Felt Desk Pad (36 x 16 Inches)
+PRICE: $32.00
+BADGE: Tactile Comfort
+IMAGE: https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B08FELT884?tag=retunda-20
+VERDICT: Dampens keyboard acoustics, warms up wrist contact, and frames your keyboard and mouse cleanly.
+
+--- PRODUCT ---
+NAME: Asymmetric Monitor Light Bar with Wireless Rotary Dimmer Puck
+PRICE: $54.00
+BADGE: Zero Screen Glare
+IMAGE: https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09LBAR712?tag=retunda-20
+VERDICT: Illuminates your desk surface for late-night reading and sketching without reflecting onto your display.
+
+--- PRODUCT ---
+NAME: Weighted Solid Brass Pen Tray & Paperweight
+PRICE: $27.00
+BADGE: Heirloom Detail
+IMAGE: https://images.unsplash.com/photo-1456735190827-d1262f71b8a3?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B08BRSS119?tag=retunda-20
+VERDICT: Develops a rich natural patina over time and keeps fountain pens and fine liners neatly aligned.
+
+--- PRODUCT ---
+NAME: Magnetic Under-Desk Cable Management Raceway Channel
+PRICE: $22.00
+BADGE: Zero Clutter
+IMAGE: https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09CABL404?tag=retunda-20
+VERDICT: Hides power bricks and thunderbolt cords completely out of sight in under ten minutes.

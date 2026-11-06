@@ -1,0 +1,85 @@
+# ============================================================================
+# RETUNDA — MASTER DIRECT AMAZON AFFILIATE LINKS (PLAIN TEXT FILE)
+# Add new --- LINK --- blocks below to display them in your Quick Shop
+# directory and reuse them across your Pinterest pages.
+# ============================================================================
+
+--- LINK ---
+ID: link-travertine-tray
+NAME: Natural Honed Beige Travertine Catchall Tray (10-Inch)
+CATEGORY: Living Room
+PRICE: $38.00
+BADGE: Best Seller
+IMAGE: https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09TRV1029?tag=retunda-20
+NOTE: Solid natural porous limestone with felt backing; anchors coffee tables, vanities, and kitchen islands.
+
+--- LINK ---
+ID: link-fluted-ceramic-vase
+NAME: Handcrafted Matte Off-White Ceramic Fluted Vase
+CATEGORY: Living Room
+PRICE: $34.00
+BADGE: Editor's Pick
+IMAGE: https://images.unsplash.com/photo-1578500494198-246f612d3b3d?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B08VASE991?tag=retunda-20
+NOTE: Architectural ribbed stoneware texture that pairs effortlessly with dried olive branches or eucalyptus stems.
+
+--- LINK ---
+ID: link-amber-glass-dispensers
+NAME: Refillable Amber Glass Soap Dispenser Set with Brushed Brass Pumps
+CATEGORY: Kitchen & Dining
+PRICE: $26.50
+BADGE: Viral on Pinterest
+IMAGE: https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B07AMBR442?tag=retunda-20
+NOTE: Thick apothecary-grade amber glass with waterproof minimalist linen labels for dish and hand soap.
+
+--- LINK ---
+ID: link-cordless-mushroom-lamp
+NAME: Rechargeable Brushed Brass Cordless Pleated Table Lamp
+CATEGORY: Workspace
+PRICE: $46.00
+BADGE: Designer Look
+IMAGE: https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B0B3LAMP88?tag=retunda-20
+NOTE: 3-stage warm dimmable LED (2700K) with 18-hour battery life—zero unsightly cords on bookshelves or desks.
+
+--- LINK ---
+ID: link-boucle-throw-pillow
+NAME: Oatmeal Textured Bouclé Square Throw Pillow Covers (Set of 2)
+CATEGORY: Living Room
+PRICE: $29.00
+BADGE: Under $30
+IMAGE: https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09BCL5512?tag=retunda-20
+NOTE: Heavyweight looped yarn weave with hidden brass zipper; instantly softens leather or linen sofas.
+
+--- LINK ---
+ID: link-walnut-monitor-riser
+NAME: Solid American Walnut Desk Shelf & Dual Monitor Stand
+CATEGORY: Workspace
+PRICE: $89.00
+BADGE: Studio Essential
+IMAGE: https://images.unsplash.com/photo-1593062096033-9a26b09da705?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09WLNT310?tag=retunda-20
+NOTE: Elevates screens to ergonomic eye level while tucking notebooks, mechanical keyboards, and audio interfaces underneath.
+
+--- LINK ---
+ID: link-waffle-bath-towels
+NAME: Turkish Organic Cotton Honeycomb Waffle Bath Sheet Set (Warm Stone)
+CATEGORY: Bath & Spa
+PRICE: $54.00
+BADGE: Fast Drying
+IMAGE: https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B08WFFL772?tag=retunda-20
+NOTE: Oversized spa-weight weave that dries 40% faster than terry cloth and exfoliates gently.
+
+--- LINK ---
+ID: link-acacia-spice-jars
+NAME: Borosilicate Glass Spice Jars with Airtight Acacia Wood Lids (Set of 12)
+CATEGORY: Kitchen & Dining
+PRICE: $36.00
+BADGE: Pantry Favorite
+IMAGE: https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=900&q=80
+AMAZON_URL: https://www.amazon.com/dp/B09SPCE604?tag=retunda-20
+NOTE: Stackable apothecary jars with pre-printed minimalist typography labels and silicone freshness seals.

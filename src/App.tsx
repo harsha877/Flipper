@@ -1,1105 +1,984 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Film,
+  ArrowLeft,
+  ArrowUpRight,
+  Bookmark,
+  Check,
+  Copy,
+  Edit3,
+  ExternalLink,
+  FilePlus2,
+  FileText,
+  HelpCircle,
+  Search,
+  Share2,
+  ShoppingBag,
   Sparkles,
-  Plus,
-  Trash2,
-  Play,
-  BookOpen,
-  Users,
+  Tag,
 } from 'lucide-react';
 import {
-  AnimationProject,
-  CharacterAccessory,
-  CharacterBodyType,
-  CharacterSpec,
-  RenderOptions,
-  SceneSpec,
-  formatTimecode,
-  getProjectTotalFrames,
-  resolveSceneAtFrame,
-} from './types/animation';
-import { STARTER_PROJECTS } from './data/presets';
-import {
-  clearRendererMemory,
-  renderProjectFrame,
-} from './engine/canvasRenderer';
-import {
-  buildSmartProjectFromPrompt,
-  buildSmartSceneFromDirection,
-  createBlankProject,
-  enforceProjectContinuity,
-} from './engine/promptDirector';
-import { StoryboardPanel } from './components/StoryboardPanel';
-import { SceneInspector } from './components/SceneInspector';
-import { Timeline } from './components/Timeline';
-import { VideoExportModal } from './components/VideoExportModal';
+  AffiliateProduct,
+  formatAmazonAffiliateUrl,
+  loadInitialFlatFileBundle,
+  RetundaPage,
+} from './utils/flatFileEngine';
+import { PinStudioModal } from './components/PinStudioModal';
+import { PageBuilderStudio } from './components/PageBuilderStudio';
+import { FlatFileGuideView } from './components/FlatFileGuideView';
 
-type WorkspaceView = 'studio' | 'storyboard' | 'characters' | 'presets';
+type ActiveView = 'storefront' | 'page-detail' | 'quick-links' | 'studio' | 'guide';
 
-export default function App() {
-  const [project, setProject] = useState<AnimationProject>(STARTER_PROJECTS[0]);
-  const [selectedSceneId, setSelectedSceneId] = useState<string>(
-    STARTER_PROJECTS[0].scenes[0].id
-  );
-  const [currentFrame, setCurrentFrame] = useState<number>(0);
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [isLooping, setIsLooping] = useState<boolean>(true);
-  const [activeView, setActiveView] = useState<WorkspaceView>('studio');
-  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+const FALLBACK_IMAGE_DATA_URI =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'><rect width='800' height='600' fill='%23F3F1EC'/><rect x='60' y='60' width='680' height='480' fill='none' stroke='%23D6D3CD' stroke-width='2'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Georgia, serif' font-size='28' fill='%2357534E'>RETUNDA CURATED FIND</text></svg>";
 
-  const [isGeneratingProject, setIsGeneratingProject] = useState<boolean>(false);
-  const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(
-    null
-  );
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+const LOCAL_CUSTOM_PAGES_KEY = 'retunda_custom_pages_v1';
+const LOCAL_QUICK_LINKS_KEY = 'retunda_quick_links_v1';
+const LOCAL_AMAZON_TAG_KEY = 'retunda_amazon_tag_v1';
 
-  const [renderOptions, setRenderOptions] = useState<RenderOptions>({
-    showOnionSkin: false,
-    showTimecodeBurnIn: true,
-    showSafeGuides: false,
-    showSubtitles: true,
+export function App() {
+  const initialBundle = useMemo(() => loadInitialFlatFileBundle(), []);
+
+  const [amazonTag, setAmazonTag] = useState<string>(() => {
+    return localStorage.getItem(LOCAL_AMAZON_TAG_KEY) || initialBundle.config.amazonTag;
   });
 
-  const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const totalFrames = Math.max(24, getProjectTotalFrames(project));
-
-  // Ensure currentFrame stays within bounds when scenes change
-  useEffect(() => {
-    if (currentFrame >= totalFrames) {
-      setCurrentFrame(Math.max(0, totalFrames - 1));
+  const [customPages, setCustomPages] = useState<RetundaPage[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_CUSTOM_PAGES_KEY);
+      return saved ? (JSON.parse(saved) as RetundaPage[]) : [];
+    } catch {
+      return [];
     }
-  }, [totalFrames, currentFrame]);
+  });
 
-  // Ensure selectedSceneId stays valid
-  const selectedScene =
-    project.scenes.find((s) => s.id === selectedSceneId) || project.scenes[0];
-
-  // Deterministic 24 FPS (41.6667ms per frame) Playback Loop
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    let animationFrameId: number;
-    let lastTime = performance.now();
-    const frameInterval = 1000 / 24; // Exact 24 FPS = 41.6667ms
-
-    const tick = (now: number) => {
-      const elapsed = now - lastTime;
-      if (elapsed >= frameInterval) {
-        lastTime = now - (elapsed % frameInterval);
-        setCurrentFrame((prev) => {
-          const next = prev + 1;
-          if (next >= totalFrames) {
-            if (isLooping) {
-              return 0;
-            } else {
-              setIsPlaying(false);
-              return Math.max(0, totalFrames - 1);
-            }
-          }
-          return next;
-        });
-      }
-      animationFrameId = requestAnimationFrame(tick);
-    };
-
-    animationFrameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [isPlaying, isLooping, totalFrames]);
-
-  // Sync selectedSceneId when playhead crosses into another scene during playback
-  useEffect(() => {
-    if (project.scenes.length > 0) {
-      const { scene } = resolveSceneAtFrame(project, currentFrame);
-      if (scene && scene.id !== selectedSceneId) {
-        setSelectedSceneId(scene.id);
-      }
+  const [quickLinks, setQuickLinks] = useState<AffiliateProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_QUICK_LINKS_KEY);
+      return saved
+        ? (JSON.parse(saved) as AffiliateProduct[])
+        : initialBundle.quickLinks;
+    } catch {
+      return initialBundle.quickLinks;
     }
-  }, [currentFrame, project, selectedSceneId]);
+  });
 
-  // Render currentFrame onto the 16:9 Stage Canvas
+  // Merge flat-file pages from src/content/pages/*.txt with any live preview pages
+  const allPages = useMemo(() => {
+    const map = new Map<string, RetundaPage>();
+    for (const filePage of initialBundle.pages) {
+      map.set(filePage.slug, filePage);
+    }
+    for (const custom of customPages) {
+      map.set(custom.slug, custom);
+    }
+    return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [initialBundle.pages, customPages]);
+
+  const [activeView, setActiveView] = useState<ActiveView>('storefront');
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [pinModalPage, setPinModalPage] = useState<RetundaPage | null>(null);
+  const [studioEditPage, setStudioEditPage] = useState<RetundaPage | null>(null);
+  const [copiedUrlSlug, setCopiedUrlSlug] = useState<string | null>(null);
+  const [editingTag, setEditingTag] = useState<boolean>(false);
+
+  // Sync URL query param (?page=slug) for Pinterest deep linking
   useEffect(() => {
-    const canvas = stageCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const params = new URLSearchParams(window.location.search);
+    const pageSlug = params.get('page');
+    if (pageSlug) {
+      setSelectedSlug(pageSlug);
+      setActiveView('page-detail');
+    }
 
-    renderProjectFrame(ctx, project, currentFrame, renderOptions);
-  }, [project, currentFrame, renderOptions, activeView]);
-
-  // Keyboard shortcuts: Space to Play/Pause, Left/Right arrows for -1F / +1F
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsPlaying((p) => !p);
-      } else if (e.code === 'ArrowLeft') {
-        e.preventDefault();
-        setIsPlaying(false);
-        setCurrentFrame((f) => Math.max(0, f - 1));
-      } else if (e.code === 'ArrowRight') {
-        e.preventDefault();
-        setIsPlaying(false);
-        setCurrentFrame((f) => Math.min(totalFrames - 1, f + 1));
+    const handlePopState = () => {
+      const nextParams = new URLSearchParams(window.location.search);
+      const nextSlug = nextParams.get('page');
+      if (nextSlug) {
+        setSelectedSlug(nextSlug);
+        setActiveView('page-detail');
+      } else {
+        setSelectedSlug(null);
+        setActiveView('storefront');
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [totalFrames]);
-
-  const handleSelectFrame = useCallback((frame: number) => {
-    setIsPlaying(false);
-    setCurrentFrame(frame);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const handleStepFrame = useCallback(
-    (delta: number) => {
-      setIsPlaying(false);
-      setCurrentFrame((prev) =>
-        Math.max(0, Math.min(totalFrames - 1, prev + delta))
+  const openPageBySlug = (slug: string) => {
+    setSelectedSlug(slug);
+    setActiveView('page-detail');
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', slug);
+    window.history.pushState({}, '', url.toString());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateHome = () => {
+    setSelectedSlug(null);
+    setActiveView('storefront');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('page');
+    window.history.pushState({}, '', url.toString());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSaveCustomPage = (newPage: RetundaPage) => {
+    setCustomPages((prev) => {
+      const filtered = prev.filter((p) => p.slug !== newPage.slug);
+      const updated = [newPage, ...filtered];
+      localStorage.setItem(LOCAL_CUSTOM_PAGES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteCustomPage = (slug: string) => {
+    setCustomPages((prev) => {
+      const updated = prev.filter((p) => p.slug !== slug);
+      localStorage.setItem(LOCAL_CUSTOM_PAGES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleSaveQuickLinks = (links: AffiliateProduct[]) => {
+    setQuickLinks(links);
+    localStorage.setItem(LOCAL_QUICK_LINKS_KEY, JSON.stringify(links));
+  };
+
+  const handleUpdateAmazonTag = (newTag: string) => {
+    const clean = newTag.trim() || 'retunda-20';
+    setAmazonTag(clean);
+    localStorage.setItem(LOCAL_AMAZON_TAG_KEY, clean);
+  };
+
+  const copyPagePinterestUrl = (slug?: string) => {
+    const base = `${window.location.origin}${window.location.pathname}`;
+    const fullUrl = slug ? `${base}?page=${encodeURIComponent(slug)}` : base;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedUrlSlug(slug || '__home__');
+    setTimeout(() => setCopiedUrlSlug(null), 2000);
+  };
+
+  const categories = useMemo(() => {
+    const set = new Set<string>(['All']);
+    allPages.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    quickLinks.forEach((l) => {
+      if (l.category) set.add(l.category);
+    });
+    return Array.from(set);
+  }, [allPages, quickLinks]);
+
+  const filteredPages = useMemo(() => {
+    return allPages.filter((page) => {
+      const matchesCat =
+        selectedCategory === 'All' || page.category === selectedCategory;
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return matchesCat;
+      const inTitle = page.title.toLowerCase().includes(q);
+      const inSummary = page.summary.toLowerCase().includes(q);
+      const inProducts = page.products.some((prod) =>
+        prod.name.toLowerCase().includes(q)
       );
-    },
-    [totalFrames]
-  );
+      return matchesCat && (inTitle || inSummary || inProducts);
+    });
+  }, [allPages, selectedCategory, searchQuery]);
 
-  const handleSelectScene = useCallback(
-    (sceneId: string, jumpToStart = false) => {
-      setSelectedSceneId(sceneId);
-      if (jumpToStart) {
-        let start = 0;
-        for (const s of project.scenes) {
-          if (s.id === sceneId) break;
-          start += s.durationFrames;
-        }
-        setCurrentFrame(start);
-      }
-    },
-    [project.scenes]
-  );
-
-  const handleClearMemory = useCallback(() => {
-    clearRendererMemory();
-    const blank = createBlankProject();
-    setProject(blank);
-    setSelectedSceneId(blank.scenes[0].id);
-    setCurrentFrame(0);
-    setIsPlaying(false);
-    setErrorMessage(null);
-    setRegeneratingSceneId(null);
-  }, []);
-
-  const handleEnforceContinuity = useCallback(() => {
-    clearRendererMemory();
-    setProject((prev) => enforceProjectContinuity(prev));
-  }, []);
-
-  const handleUpdateScene = (updatedScene: SceneSpec) => {
-    setProject((prev) => ({
-      ...prev,
-      scenes: prev.scenes.map((s) =>
-        s.id === updatedScene.id ? updatedScene : s
-      ),
-    }));
-  };
-
-  const handleAddScene = () => {
-    const newSceneId = `scene_${Date.now()}`;
-    const firstChar = project.characters[0];
-    const secondChar = project.characters[1] || firstChar;
-
-    const newScene: SceneSpec = {
-      id: newSceneId,
-      title: `Scene ${project.scenes.length + 1}: New Sequence`,
-      narrativeSummary:
-        'Characters gather on stage for the next beat of the story.',
-      durationFrames: 96, // 4.0s @ 24 FPS
-      environmentTheme: 'forest',
-      timeOfDay: 'dusk',
-      weatherEffect: 'fireflies',
-      cameraMotion: 'pan_right',
-      foregroundProp: 'none',
-      characterPlacements: [
-        ...(firstChar
-          ? [
-              {
-                characterId: firstChar.id,
-                startX: 24,
-                startY: 73,
-                endX: 42,
-                endY: 73,
-                scale: 1.0,
-                action: 'walk' as const,
-                expression: 'happy' as const,
-                facing: 'right' as const,
-              },
-            ]
-          : []),
-        ...(secondChar && secondChar.id !== firstChar?.id
-          ? [
-              {
-                characterId: secondChar.id,
-                startX: 68,
-                startY: 74,
-                endX: 58,
-                endY: 74,
-                scale: 1.0,
-                action: 'wave' as const,
-                expression: 'excited' as const,
-                facing: 'left' as const,
-              },
-            ]
-          : []),
-      ],
-      dialogues: firstChar
-        ? [
-            {
-              id: `dlg_${Date.now()}`,
-              characterId: firstChar.id,
-              speakerName: firstChar.name,
-              text: 'Ready for action on frame one!',
-              startFrameOffset: 8,
-              durationFrames: 48,
-            },
-          ]
-        : [],
-    };
-
-    setProject((prev) => ({
-      ...prev,
-      scenes: [...prev.scenes, newScene],
-    }));
-    setSelectedSceneId(newSceneId);
-  };
-
-  const handleDuplicateScene = (sceneId: string) => {
-    const idx = project.scenes.findIndex((s) => s.id === sceneId);
-    if (idx === -1) return;
-    const orig = project.scenes[idx];
-    const copy: SceneSpec = {
-      ...orig,
-      id: `scene_${Date.now()}`,
-      title: `${orig.title} (Copy)`,
-      dialogues: orig.dialogues.map((d, i) => ({
-        ...d,
-        id: `dlg_${Date.now()}_${i}`,
-      })),
-    };
-    const nextScenes = [...project.scenes];
-    nextScenes.splice(idx + 1, 0, copy);
-    setProject((prev) => ({ ...prev, scenes: nextScenes }));
-    setSelectedSceneId(copy.id);
-  };
-
-  const handleDeleteScene = (sceneId: string) => {
-    if (project.scenes.length <= 1) return;
-    const nextScenes = project.scenes.filter((s) => s.id !== sceneId);
-    setProject((prev) => ({ ...prev, scenes: nextScenes }));
-    if (selectedSceneId === sceneId) {
-      setSelectedSceneId(nextScenes[0].id);
-    }
-  };
-
-  const handleMoveScene = (sceneId: string, direction: 'up' | 'down') => {
-    const idx = project.scenes.findIndex((s) => s.id === sceneId);
-    if (idx === -1) return;
-    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= project.scenes.length) return;
-    const nextScenes = [...project.scenes];
-    const [removed] = nextScenes.splice(idx, 1);
-    nextScenes.splice(targetIdx, 0, removed);
-    setProject((prev) => ({ ...prev, scenes: nextScenes }));
-  };
-
-  const parseApiJson = async (response: Response) => {
-    const rawText = await response.text();
-    const trimmed = rawText.trim();
-    if (
-      trimmed.toLowerCase().startsWith('<!doctype') ||
-      trimmed.toLowerCase().startsWith('<html')
-    ) {
-      return { __isHtmlFallback: true };
-    }
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return { __isHtmlFallback: true };
-    }
-  };
-
-  const handleGenerateProject = async (
-    prompt: string,
-    sceneCount: number,
-    visualStyle: string
-  ) => {
-    setIsGeneratingProject(true);
-    setErrorMessage(null);
-    clearRendererMemory();
-    try {
-      const response = await fetch('/api/storyboard/generate', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ prompt, sceneCount, visualStyle }),
-      });
-      const data = await parseApiJson(response);
-
-      const nextProject =
-        data?.project ||
-        (data?.__isHtmlFallback
-          ? buildSmartProjectFromPrompt(prompt, sceneCount, visualStyle)
-          : null);
-
-      if (!nextProject) {
-        throw new Error(
-          data?.error || 'Failed to generate storyboard from prompt.'
-        );
-      }
-
-      clearRendererMemory();
-      setProject(nextProject);
-      if (nextProject.scenes?.[0]?.id) {
-        setSelectedSceneId(nextProject.scenes[0].id);
-      }
-      setCurrentFrame(0);
-      setIsPlaying(true);
-    } catch {
-      // Seamless fallback if offline or local Vite-only server is used
-      clearRendererMemory();
-      const fallbackProject = buildSmartProjectFromPrompt(
-        prompt,
-        sceneCount,
-        visualStyle
+  const filteredQuickLinks = useMemo(() => {
+    return quickLinks.filter((item) => {
+      const matchesCat =
+        selectedCategory === 'All' || item.category === selectedCategory;
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return matchesCat;
+      return (
+        matchesCat &&
+        (item.name.toLowerCase().includes(q) ||
+          item.verdict.toLowerCase().includes(q))
       );
-      setProject(fallbackProject);
-      if (fallbackProject.scenes?.[0]?.id) {
-        setSelectedSceneId(fallbackProject.scenes[0].id);
-      }
-      setCurrentFrame(0);
-      setIsPlaying(true);
-    } finally {
-      setIsGeneratingProject(false);
-    }
-  };
+    });
+  }, [quickLinks, selectedCategory, searchQuery]);
 
-  const handleRegenerateScene = async (
-    scene: SceneSpec,
-    directionPrompt: string
-  ) => {
-    // If the user pasted a multi-shot script (Shot 1..Shot 2) into the scene summary,
-    // rebuild the full storyboard from that script so no old scenes remain!
-    if (/\bshot\s*1\b[\s\S]*\bshot\s*2\b/i.test(directionPrompt)) {
-      await handleGenerateProject(directionPrompt, 4, project.visualStyle);
-      return;
-    }
+  const currentPage = useMemo(() => {
+    if (!selectedSlug) return null;
+    return allPages.find((p) => p.slug === selectedSlug) || null;
+  }, [allPages, selectedSlug]);
 
-    setRegeneratingSceneId(scene.id);
-    setErrorMessage(null);
-    clearRendererMemory();
-    try {
-      const response = await fetch('/api/storyboard/regenerate-scene', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          projectTitle: project.title,
-          characters: project.characters,
-          currentScene: scene,
-          scenePrompt: directionPrompt,
-        }),
-      });
-      const data = await parseApiJson(response);
-
-      const nextScene =
-        data?.scene ||
-        (data?.__isHtmlFallback
-          ? buildSmartSceneFromDirection(
-              scene,
-              project.characters,
-              directionPrompt
-            )
-          : null);
-
-      if (!nextScene) {
-        throw new Error(data?.error || 'Failed to regenerate scene.');
-      }
-      handleUpdateScene({ ...nextScene, id: scene.id });
-    } catch {
-      const fallbackScene = buildSmartSceneFromDirection(
-        scene,
-        project.characters,
-        directionPrompt
-      );
-      handleUpdateScene({ ...fallbackScene, id: scene.id });
-    } finally {
-      setRegeneratingSceneId(null);
-    }
-  };
-
-  const handleUpdateCharacter = (index: number, patch: Partial<CharacterSpec>) => {
-    setProject((prev) => ({
-      ...prev,
-      characters: prev.characters.map((c, idx) =>
-        idx === index ? { ...c, ...patch } : c
-      ),
-    }));
-  };
-
-  const handleAddCharacter = () => {
-    const newChar: CharacterSpec = {
-      id: `char_${Date.now()}`,
-      name: `Actor ${project.characters.length + 1}`,
-      role: 'Supporting Character',
-      primaryColor: '#EC4899',
-      secondaryColor: '#38BDF8',
-      skinOrFurColor: '#FDE68A',
-      bodyType: 'humanoid',
-      accessory: 'headphones',
-    };
-    setProject((prev) => ({
-      ...prev,
-      characters: [...prev.characters, newChar],
-    }));
-  };
-
-  const handleDeleteCharacter = (charId: string) => {
-    if (project.characters.length <= 1) return;
-    setProject((prev) => ({
-      ...prev,
-      characters: prev.characters.filter((c) => c.id !== charId),
-    }));
-  };
-
-  const { sceneIndex, localFrame } = resolveSceneAtFrame(project, currentFrame);
+  const featuredPage = allPages[0] || null;
 
   return (
-    <div className="min-h-screen h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Strict 3-Zone Top Bar Contract */}
-      <header className="flex items-center justify-between gap-8 px-6 py-3.5 border-b border-slate-800 bg-slate-950 shrink-0">
-        {/* Zone 1: Single text element brand wordmark */}
-        <a
-          href="#studio"
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveView('studio');
-          }}
-          className="text-lg font-bold tracking-tight text-slate-100 font-display whitespace-nowrap shrink-0"
-        >
-          Flipper
-        </a>
+    <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1C1917]">
+      {/* Top Utility Bar */}
+      <div className="bg-[#F3F1EC] border-b border-[#E7E5E0] text-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="text-[#57534E] text-[11px] sm:text-xs text-center sm:text-left font-mono uppercase tracking-wider">
+            {initialBundle.config.tagline}
+          </p>
 
-        {/* Zone 2: 4 concise single-line text navigation links */}
-        <nav className="flex items-center gap-6 text-sm font-medium text-slate-400">
-          <a
-            href="#studio"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveView('studio');
-            }}
-            className={`transition-colors whitespace-nowrap shrink-0 ${
-              activeView === 'studio'
-                ? 'text-amber-400 underline underline-offset-8'
-                : 'hover:text-slate-100'
-            }`}
-          >
-            Studio Stage
-          </a>
-          <a
-            href="#storyboard"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveView('storyboard');
-            }}
-            className={`transition-colors whitespace-nowrap shrink-0 ${
-              activeView === 'storyboard'
-                ? 'text-amber-400 underline underline-offset-8'
-                : 'hover:text-slate-100'
-            }`}
-          >
-            Storyboard Sheet
-          </a>
-          <a
-            href="#characters"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveView('characters');
-            }}
-            className={`transition-colors whitespace-nowrap shrink-0 ${
-              activeView === 'characters'
-                ? 'text-amber-400 underline underline-offset-8'
-                : 'hover:text-slate-100'
-            }`}
-          >
-            Character Cast
-          </a>
-          <a
-            href="#presets"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveView('presets');
-            }}
-            className={`transition-colors whitespace-nowrap shrink-0 ${
-              activeView === 'presets'
-                ? 'text-amber-400 underline underline-offset-8'
-                : 'hover:text-slate-100'
-            }`}
-          >
-            Starter Stories
-          </a>
-        </nav>
-
-        {/* Zone 3: 1 primary action */}
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setIsPlaying(false);
-              setIsExportModalOpen(true);
-            }}
-            className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-500 rounded-lg hover:bg-amber-400 transition-colors cursor-pointer whitespace-nowrap shrink-0"
-          >
-            Export Video
-          </button>
-        </div>
-      </header>
-
-      {/* Main Studio Body */}
-      {activeView === 'studio' && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 flex min-h-0 overflow-hidden">
-            {/* Left Sidebar: AI Storyboard Director & Scene Strip */}
-            <StoryboardPanel
-              project={project}
-              selectedSceneId={selectedScene.id}
-              isGeneratingProject={isGeneratingProject}
-              regeneratingSceneId={regeneratingSceneId}
-              errorMessage={errorMessage}
-              onGenerateProject={handleGenerateProject}
-              onClearMemory={handleClearMemory}
-              onEnforceContinuity={handleEnforceContinuity}
-              onSelectScene={handleSelectScene}
-              onAddScene={handleAddScene}
-              onDuplicateScene={handleDuplicateScene}
-              onDeleteScene={handleDeleteScene}
-              onMoveScene={handleMoveScene}
-              onRegenerateScene={handleRegenerateScene}
-            />
-
-            {/* Center Viewport: 16:9 Stage Canvas */}
-            <main className="flex-1 flex flex-col bg-slate-950 min-w-0 overflow-hidden">
-              {/* Sub-header context bar */}
-              <div className="px-6 py-2.5 border-b border-slate-800/80 flex items-center justify-between gap-4 bg-slate-900/40 shrink-0">
-                <div className="flex items-center gap-2 text-xs text-slate-300 truncate">
-                  <span className="font-semibold text-slate-100 truncate">
-                    {project.title}
-                  </span>
-                  <span aria-hidden="true" className="text-slate-600">
-                    ·
-                  </span>
-                  <span className="text-slate-400 truncate">
-                    {project.visualStyle}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-400 shrink-0">
-                  <span>
-                    Scene 0{sceneIndex + 1}: {selectedScene.title}
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-amber-400">
-                    Frame {localFrame + 1}/{selectedScene.durationFrames}
-                  </span>
-                </div>
-              </div>
-
-              {/* 16:9 Canvas Stage Container */}
-              <div className="flex-1 flex items-center justify-center p-6 overflow-hidden">
-                <div className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl">
-                  <canvas
-                    ref={stageCanvasRef}
-                    width={project.width || 1280}
-                    height={project.height || 720}
-                    onClick={() => setIsPlaying((p) => !p)}
-                    title="Click stage to Play / Pause animation"
-                    className="w-full h-full object-contain cursor-pointer block"
-                  />
-                </div>
-              </div>
-            </main>
-
-            {/* Right Sidebar: Scene, Character & Dialogue Inspector */}
-            <SceneInspector
-              project={project}
-              selectedScene={selectedScene}
-              isRegenerating={regeneratingSceneId === selectedScene.id}
-              onUpdateScene={handleUpdateScene}
-              onRegenerateScene={handleRegenerateScene}
-            />
-          </div>
-
-          {/* Bottom Dock: Interactive Timeline */}
-          <Timeline
-            project={project}
-            currentFrame={currentFrame}
-            isPlaying={isPlaying}
-            isLooping={isLooping}
-            renderOptions={renderOptions}
-            selectedSceneId={selectedScene.id}
-            onSelectFrame={handleSelectFrame}
-            onTogglePlay={() => setIsPlaying((p) => !p)}
-            onStepFrame={handleStepFrame}
-            onToggleLoop={() => setIsLooping((l) => !l)}
-            onUpdateRenderOptions={(patch) =>
-              setRenderOptions((prev) => ({ ...prev, ...patch }))
-            }
-            onSelectScene={handleSelectScene}
-          />
-        </div>
-      )}
-
-      {/* View 2: Full Storyboard Sheet View */}
-      {activeView === 'storyboard' && (
-        <main className="flex-1 overflow-y-auto p-8 max-w-7xl w-full mx-auto space-y-6">
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-5">
-            <div>
-              <p className="text-xs font-mono tabular-nums text-amber-400 mb-1">
-                PRODUCTION EXPOSURE SHEET · {totalFrames} FRAMES TOTAL (
-                {(totalFrames / 24).toFixed(1)}s)
-              </p>
-              <h1 className="text-2xl font-bold text-slate-100 font-display">
-                {project.title} — Storyboard Breakdown
-              </h1>
-              <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-                {project.logline || project.prompt}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleAddScene}
-                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-100 flex items-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Scene Card</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveView('studio')}
-                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-xs font-semibold text-slate-950 flex items-center gap-2 cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                <span>Open in Stage</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {project.scenes.map((sc, idx) => {
-              const startFrame = project.scenes
-                .slice(0, idx)
-                .reduce((acc, s) => acc + s.durationFrames, 0);
-              const isCardRegenerating = regeneratingSceneId === sc.id;
-              return (
-                <div
-                  key={sc.id}
-                  className="rounded-xl bg-slate-900 border border-slate-800 p-5 flex flex-col justify-between space-y-4"
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#57534E]">
+              <Tag className="w-3 h-3 text-[#B45309]" />
+              <span>Amazon Tag:</span>
+              {editingTag ? (
+                <input
+                  type="text"
+                  value={amazonTag}
+                  onChange={(e) => handleUpdateAmazonTag(e.target.value)}
+                  onBlur={() => setEditingTag(false)}
+                  onKeyDown={(e) => e.key === 'Enter' && setEditingTag(false)}
+                  autoFocus
+                  className="bg-[#FAF9F6] border border-[#1C1917] px-1.5 py-0.5 text-[#1C1917] w-28 focus:outline-none"
+                />
+              ) : (
+                <button
+                  onClick={() => setEditingTag(true)}
+                  className="text-[#1C1917] font-semibold underline decoration-dotted hover:text-[#B45309] cursor-pointer"
+                  title="Click to change your Amazon Associate tag globally"
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs font-mono tabular-nums text-slate-400">
-                      <span className="text-amber-400 font-semibold">
-                        SCENE 0{idx + 1}
-                      </span>
-                      <span>
-                        {formatTimecode(startFrame)} →{' '}
-                        {formatTimecode(startFrame + sc.durationFrames)} (
-                        {sc.durationFrames}F)
-                      </span>
-                    </div>
-
-                    <input
-                      type="text"
-                      value={sc.title}
-                      onChange={(e) =>
-                        handleUpdateScene({ ...sc, title: e.target.value })
-                      }
-                      className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-sm font-semibold text-slate-100 focus:outline-none focus:border-amber-500"
-                    />
-
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        Narrative Action Summary (Edit &amp; Apply to Stage)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={sc.narrativeSummary}
-                        onChange={(e) =>
-                          handleUpdateScene({
-                            ...sc,
-                            narrativeSummary: e.target.value,
-                          })
-                        }
-                        className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-amber-500 resize-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={
-                          isCardRegenerating || !sc.narrativeSummary.trim()
-                        }
-                        onClick={() =>
-                          handleRegenerateScene(sc, sc.narrativeSummary)
-                        }
-                        className="mt-1.5 w-full py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 disabled:opacity-40 text-amber-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>
-                          {isCardRegenerating
-                            ? 'Applying Narrative...'
-                            : 'Apply Narrative to Scene'}
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-slate-400 flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
-                      <span className="capitalize">
-                        Set: {sc.environmentTheme.replace('_', ' ')}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span className="capitalize">Time: {sc.timeOfDay}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="capitalize">
-                        Cam: {sc.cameraMotion.replace('_', ' ')}
-                      </span>
-                    </div>
-
-                    {/* Dialogue Script Excerpt */}
-                    {sc.dialogues.length > 0 && (
-                      <div className="space-y-1.5 pt-2">
-                        <p className="text-[11px] font-medium text-slate-400">
-                          Synchronized Dialogue ({sc.dialogues.length})
-                        </p>
-                        {sc.dialogues.map((d) => (
-                          <div
-                            key={d.id}
-                            className="text-xs text-slate-200 bg-slate-950/70 rounded p-2 border border-slate-800/80"
-                          >
-                            <span className="font-semibold text-amber-400">
-                              {d.speakerName}:{' '}
-                            </span>
-                            <span>&ldquo;{d.text}&rdquo;</span>
-                            <span className="block text-[10px] font-mono tabular-nums text-slate-500 mt-0.5">
-                              +F{d.startFrameOffset} · {d.durationFrames} Frames
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-xs text-slate-400">
-                      {sc.characterPlacements.length} Rigged Actors
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSelectScene(sc.id, true);
-                        setActiveView('studio');
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-amber-400 cursor-pointer"
-                    >
-                      Jump to Scene Frame →
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </main>
-      )}
-
-      {/* View 3: Character Cast & Rig Customizer */}
-      {activeView === 'characters' && (
-        <main className="flex-1 overflow-y-auto p-8 max-w-6xl w-full mx-auto space-y-6">
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-5">
-            <div>
-              <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
-                <Users className="w-4 h-4" />
-                <span>ARTICULATED PUPPET RIGS</span>
-              </div>
-              <h1 className="text-2xl font-bold text-slate-100 font-display">
-                Character Cast &amp; Rig Wardrobe
-              </h1>
-              <p className="text-sm text-slate-400 mt-1">
-                Customize character silhouettes, color palettes, body rigs, and
-                accessories. Changes immediately update across all scenes.
-              </p>
+                  {amazonTag}
+                </button>
+              )}
             </div>
+
+            <span className="text-[#D6D3CD]">|</span>
 
             <button
-              type="button"
-              onClick={handleAddCharacter}
-              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold flex items-center gap-2 cursor-pointer"
+              onClick={() => copyPagePinterestUrl()}
+              className="inline-flex items-center gap-1 font-mono text-[11px] text-[#1C1917] hover:text-[#B45309] cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Create Character Rig</span>
+              {copiedUrlSlug === '__home__' ? (
+                <>
+                  <Check className="w-3 h-3 text-[#15803D]" /> Profile URL Copied
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-3 h-3" /> Copy Pinterest Profile URL
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Editorial Header & Navigation */}
+      <header className="sticky top-0 z-40 bg-[#FAF9F6]/95 backdrop-blur-xs border-b border-[#E7E5E0]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          {/* Brand Masthead */}
+          <div className="flex items-center gap-6">
+            <button
+              onClick={navigateHome}
+              className="text-left group cursor-pointer flex items-baseline gap-2.5"
+            >
+              <span className="font-serif-display text-2xl sm:text-3xl font-semibold tracking-tight text-[#1C1917] group-hover:text-[#B45309] transition-colors">
+                {initialBundle.config.siteName}
+              </span>
+              <span className="hidden md:inline-block font-mono text-[10px] uppercase tracking-widest text-[#57534E]">
+                Curated Amazon Edit
+              </span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {project.characters.map((char, idx) => (
-              <div
-                key={char.id}
-                className="rounded-xl bg-slate-900 border border-slate-800 p-5 space-y-4"
+          {/* Primary Navigation */}
+          <nav className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={navigateHome}
+              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                activeView === 'storefront' || activeView === 'page-detail'
+                  ? 'bg-[#1C1917] text-[#FAF9F6]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
+              }`}
+            >
+              Pages ({allPages.length})
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedSlug(null);
+                setActiveView('quick-links');
+              }}
+              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                activeView === 'quick-links'
+                  ? 'bg-[#1C1917] text-[#FAF9F6]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
+              }`}
+            >
+              Direct Links ({quickLinks.length})
+            </button>
+
+            <button
+              onClick={() => {
+                setStudioEditPage(null);
+                setActiveView('studio');
+              }}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                activeView === 'studio'
+                  ? 'bg-[#B45309] text-[#FAF9F6]'
+                  : 'border border-[#B45309] text-[#B45309] hover:bg-[#B45309] hover:text-[#FAF9F6]'
+              }`}
+            >
+              <FilePlus2 className="w-3.5 h-3.5" />
+              <span>+ Add Page (.txt)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView('guide')}
+              className={`hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                activeView === 'guide'
+                  ? 'bg-[#1C1917] text-[#FAF9F6]'
+                  : 'text-[#57534E] hover:text-[#1C1917]'
+              }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>How It Works</span>
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1">
+        {/* VIEW 1: DEDICATED PINTEREST BRIDGE LANDING PAGE (?page=<slug>) */}
+        {activeView === 'page-detail' && currentPage && (
+          <article className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+            {/* Top Action Bar for the Page */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-[#E7E5E0]">
+              <button
+                onClick={navigateHome}
+                className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#57534E] hover:text-[#1C1917] cursor-pointer"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      style={{ backgroundColor: char.primaryColor }}
-                      className="w-8 h-8 rounded-lg border border-white/20 shrink-0"
-                    />
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-100">
-                        {char.name}
-                      </h3>
-                      <p className="text-xs text-slate-400">{char.role}</p>
-                    </div>
-                  </div>
-                  {project.characters.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCharacter(char.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                <ArrowLeft className="w-4 h-4" />
+                Back to All Retunda Pages
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs text-[#57534E] bg-[#F3F1EC] border border-[#E7E5E0] px-2.5 py-1">
+                  File: <code>src/content/pages/{currentPage.fileName}</code>
+                </span>
+
+                <button
+                  onClick={() => copyPagePinterestUrl(currentPage.slug)}
+                  className="inline-flex items-center gap-1.5 border border-[#E7E5E0] bg-[#F3F1EC] px-3 py-1.5 text-xs font-mono text-[#1C1917] hover:border-[#B45309] cursor-pointer"
+                >
+                  {copiedUrlSlug === currentPage.slug ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-[#15803D]" /> Pinterest Link Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" /> Copy Page Link for Pinterest
+                    </>
                   )}
+                </button>
+
+                <button
+                  onClick={() => setPinModalPage(currentPage)}
+                  className="inline-flex items-center gap-1.5 bg-[#B45309] text-[#FAF9F6] px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-[#1C1917] transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  2:3 Pin Graphic &amp; SEO
+                </button>
+
+                <button
+                  onClick={() => {
+                    setStudioEditPage(currentPage);
+                    setActiveView('studio');
+                  }}
+                  className="inline-flex items-center gap-1.5 border border-[#1C1917] px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-[#1C1917] hover:bg-[#1C1917] hover:text-[#FAF9F6] transition-colors cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Edit .txt
+                </button>
+              </div>
+            </div>
+
+            {/* Editorial Split Hero */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 py-8 sm:py-10 border-b border-[#E7E5E0] items-center">
+              <div className="lg:col-span-7 space-y-4">
+                <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-[#B45309]">
+                  <span>{currentPage.category}</span>
+                  <span>•</span>
+                  <span>{currentPage.products.length} Curated Amazon Finds</span>
+                  <span>•</span>
+                  <span>{currentPage.readTime}</span>
                 </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Character Name
-                    </label>
-                    <input
-                      type="text"
-                      value={char.name}
-                      onChange={(e) =>
-                        handleUpdateCharacter(idx, { name: e.target.value })
-                      }
-                      className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs text-slate-100"
-                    />
-                  </div>
+                <h1 className="font-serif-display text-3xl sm:text-5xl font-semibold text-[#1C1917] leading-[1.1] tracking-tight">
+                  {currentPage.title}
+                </h1>
 
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Narrative Role
-                    </label>
-                    <input
-                      type="text"
-                      value={char.role}
-                      onChange={(e) =>
-                        handleUpdateCharacter(idx, { role: e.target.value })
-                      }
-                      className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs text-slate-100"
-                    />
-                  </div>
+                <p className="text-base sm:text-lg text-[#57534E] leading-relaxed max-w-2xl">
+                  {currentPage.summary}
+                </p>
 
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">
-                        Body Rig Archetype
-                      </label>
-                      <select
-                        value={char.bodyType}
-                        onChange={(e) =>
-                          handleUpdateCharacter(idx, {
-                            bodyType: e.target.value as CharacterBodyType,
-                          })
-                        }
-                        className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200"
-                      >
-                        <option value="humanoid">Humanoid</option>
-                        <option value="animal_fox">Articulated Fox</option>
-                        <option value="animal_cat">Articulated Cat</option>
-                        <option value="robot">Cyber Android</option>
-                        <option value="astronaut">Astronaut</option>
-                        <option value="spirit">Forest Spirit</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">
-                        Prop / Wardrobe
-                      </label>
-                      <select
-                        value={char.accessory}
-                        onChange={(e) =>
-                          handleUpdateCharacter(idx, {
-                            accessory: e.target.value as CharacterAccessory,
-                          })
-                        }
-                        className="w-full rounded-lg bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-xs text-slate-200"
-                      >
-                        <option value="none">None</option>
-                        <option value="helmet">Space Helmet</option>
-                        <option value="scarf">Wind Scarf</option>
-                        <option value="glasses">Round Glasses</option>
-                        <option value="crown">Royal Crown</option>
-                        <option value="backpack">Explorer Pack</option>
-                        <option value="cape">Hero Cape</option>
-                        <option value="antenna">Signal Antenna</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        Primary Color
-                      </label>
-                      <input
-                        type="color"
-                        value={char.primaryColor}
-                        onChange={(e) =>
-                          handleUpdateCharacter(idx, {
-                            primaryColor: e.target.value,
-                          })
-                        }
-                        className="w-full h-8 rounded bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        Accent Color
-                      </label>
-                      <input
-                        type="color"
-                        value={char.secondaryColor}
-                        onChange={(e) =>
-                          handleUpdateCharacter(idx, {
-                            secondaryColor: e.target.value,
-                          })
-                        }
-                        className="w-full h-8 rounded bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        Head / Fur
-                      </label>
-                      <input
-                        type="color"
-                        value={char.skinOrFurColor}
-                        onChange={(e) =>
-                          handleUpdateCharacter(idx, {
-                            skinOrFurColor: e.target.value,
-                          })
-                        }
-                        className="w-full h-8 rounded bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
-                    </div>
-                  </div>
+                <div className="pt-2 flex flex-wrap items-center gap-3 text-xs font-mono text-[#57534E]">
+                  <span>Updated {currentPage.date}</span>
+                  <span>•</span>
+                  <span>Affiliate Tag Active: ?tag={amazonTag}</span>
                 </div>
               </div>
-            ))}
-          </div>
-        </main>
-      )}
 
-      {/* View 4: Starter Story Templates */}
-      {activeView === 'presets' && (
-        <main className="flex-1 overflow-y-auto p-8 max-w-6xl w-full mx-auto space-y-6">
-          <div className="border-b border-slate-800 pb-5">
-            <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
-              <BookOpen className="w-4 h-4" />
-              <span>READY-TO-PLAY PRODUCTIONS</span>
+              <div className="lg:col-span-5">
+                <div className="aspect-[4/3] bg-[#F3F1EC] border border-[#E7E5E0] overflow-hidden">
+                  <img
+                    src={currentPage.heroImage}
+                    alt={currentPage.title}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                    }}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-slate-100 font-display">
-              Starter Animated Story Projects
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Load a curated multi-scene story production to inspect its
-              rigging, camera choreography, or remix it with Gemini AI.
+
+            {/* Numbered Product Showcase Grid */}
+            <div className="py-10">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-serif-display text-2xl font-semibold text-[#1C1917]">
+                  Shop the Curated Edit ({currentPage.products.length} Items)
+                </h2>
+                <span className="font-mono text-xs text-[#57534E]">
+                  All links open directly on Amazon.com
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {currentPage.products.map((prod, index) => {
+                  const taggedUrl = formatAmazonAffiliateUrl(
+                    prod.amazonUrl,
+                    amazonTag
+                  );
+                  return (
+                    <div
+                      key={prod.id || index}
+                      className="bg-[#F3F1EC] border border-[#E7E5E0] flex flex-col justify-between group hover:border-[#1C1917] transition-colors"
+                    >
+                      <div>
+                        {/* Product Image & Number Stamp */}
+                        <div className="relative aspect-[4/3] bg-[#FAF9F6] border-b border-[#E7E5E0] overflow-hidden">
+                          <img
+                            src={prod.image}
+                            alt={prod.name}
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                            }}
+                            className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
+                          />
+                          <div className="absolute top-3 left-3 bg-[#1C1917] text-[#FAF9F6] font-mono text-xs px-2.5 py-1">
+                            0{index + 1}
+                          </div>
+                          {prod.badge && (
+                            <div className="absolute top-3 right-3 bg-[#FAF9F6]/95 border border-[#E7E5E0] text-[#B45309] font-mono text-[11px] uppercase tracking-wider px-2.5 py-1">
+                              {prod.badge}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Product Copy */}
+                        <div className="p-5 space-y-2.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-mono text-xs uppercase tracking-wider text-[#57534E]">
+                              Amazon Prime Find
+                            </span>
+                            <span className="font-mono text-base font-semibold text-[#1C1917] tabular-nums">
+                              {prod.price}
+                            </span>
+                          </div>
+
+                          <h3 className="font-serif-display text-lg font-semibold text-[#1C1917] leading-snug">
+                            {prod.name}
+                          </h3>
+
+                          <p className="text-xs text-[#57534E] leading-relaxed">
+                            {prod.verdict}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* High-Contrast Amazon Affiliate CTA */}
+                      <div className="p-5 pt-0">
+                        <a
+                          href={taggedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer sponsored"
+                          className="w-full inline-flex items-center justify-between bg-[#1C1917] text-[#FAF9F6] px-4 py-3 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors"
+                        >
+                          <span>Check Price on Amazon</span>
+                          <ArrowUpRight className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </article>
+        )}
+
+        {/* VIEW 2: STOREFRONT HOME (ALL DYNAMIC PAGES + QUICK LINKS PREVIEW) */}
+        {activeView === 'storefront' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-14">
+            {/* Asymmetric Editorial Hero */}
+            {featuredPage && (
+              <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12 border-b border-[#E7E5E0] items-center">
+                <div className="lg:col-span-6 space-y-5">
+                  <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-[#B45309]">
+                    <span>Featured Pinterest Edition</span>
+                    <span>•</span>
+                    <span>{featuredPage.category}</span>
+                  </div>
+
+                  <h1 className="font-serif-display text-4xl sm:text-5xl lg:text-6xl font-semibold text-[#1C1917] leading-[1.06] tracking-tight">
+                    {featuredPage.title}
+                  </h1>
+
+                  <p className="text-base sm:text-lg text-[#57534E] leading-relaxed max-w-xl">
+                    {featuredPage.summary}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <button
+                      onClick={() => openPageBySlug(featuredPage.slug)}
+                      className="inline-flex items-center gap-2 bg-[#1C1917] text-[#FAF9F6] px-6 py-3.5 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors cursor-pointer"
+                    >
+                      <span>Explore All {featuredPage.products.length} Finds</span>
+                      <ArrowUpRight className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => setPinModalPage(featuredPage)}
+                      className="inline-flex items-center gap-2 border border-[#1C1917] bg-[#FAF9F6] text-[#1C1917] px-5 py-3.5 text-xs font-mono uppercase tracking-wider hover:bg-[#F3F1EC] transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-[#B45309]" />
+                      <span>Pin Graphic &amp; Link</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-6">
+                  <div
+                    onClick={() => openPageBySlug(featuredPage.slug)}
+                    className="relative aspect-[16/11] bg-[#F3F1EC] border border-[#E7E5E0] overflow-hidden cursor-pointer group"
+                  >
+                    <img
+                      src={featuredPage.heroImage}
+                      alt={featuredPage.title}
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
+                    />
+                    <div className="absolute bottom-4 left-4 right-4 bg-[#FAF9F6]/95 border border-[#E7E5E0] p-4 flex items-center justify-between">
+                      <div>
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-[#B45309] block">
+                          Pinterest Bridge URL: ?page={featuredPage.slug}
+                        </span>
+                        <span className="font-serif-display text-sm font-semibold text-[#1C1917]">
+                          Click to view all {featuredPage.products.length} Amazon affiliate links →
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs text-[#57534E] hidden sm:inline">
+                        {featuredPage.fileName}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Category & Search Filter Bar */}
+            <section className="space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E7E5E0] pb-4">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                        selectedCategory === cat
+                          ? 'bg-[#1C1917] text-[#FAF9F6]'
+                          : 'bg-[#F3F1EC] text-[#57534E] hover:text-[#1C1917] border border-[#E7E5E0]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative w-full md:w-72">
+                  <Search className="w-4 h-4 text-[#57534E] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search pages or Amazon products..."
+                    className="w-full bg-[#F3F1EC] border border-[#E7E5E0] pl-9 pr-3 py-2 text-xs text-[#1C1917] focus:outline-none focus:border-[#1C1917]"
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Pages Grid (Loaded from src/content/pages/*.txt) */}
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <h2 className="font-serif-display text-2xl sm:text-3xl font-semibold text-[#1C1917]">
+                    Curated Pinterest Landing Pages
+                  </h2>
+                  <p className="text-xs text-[#57534E] mt-0.5">
+                    Powered by flat text files in <code className="font-mono">src/content/pages/*.txt</code>. Attach any page link below to your Pinterest Pins.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setStudioEditPage(null);
+                    setActiveView('studio');
+                  }}
+                  className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#B45309] hover:text-[#1C1917] cursor-pointer"
+                >
+                  <FilePlus2 className="w-4 h-4" />
+                  + Create New Page (.txt)
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {filteredPages.map((page) => (
+                  <div
+                    key={page.slug}
+                    className="bg-[#F3F1EC] border border-[#E7E5E0] flex flex-col justify-between group hover:border-[#1C1917] transition-colors"
+                  >
+                    <div>
+                      <div
+                        onClick={() => openPageBySlug(page.slug)}
+                        className="relative aspect-[16/10] bg-[#FAF9F6] border-b border-[#E7E5E0] overflow-hidden cursor-pointer"
+                      >
+                        <img
+                          src={page.heroImage}
+                          alt={page.title}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                          }}
+                          className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
+                        />
+                        <div className="absolute top-3 left-3 bg-[#FAF9F6]/95 border border-[#E7E5E0] px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-[#1C1917]">
+                          {page.category}
+                        </div>
+                        <div className="absolute top-3 right-3 bg-[#1C1917] text-[#FAF9F6] px-2.5 py-1 font-mono text-[11px] tabular-nums">
+                          {page.products.length} Amazon Finds
+                        </div>
+                      </div>
+
+                      <div className="p-6 space-y-3">
+                        <div className="flex items-center justify-between font-mono text-[11px] text-[#57534E]">
+                          <span className="inline-flex items-center gap-1">
+                            <FileText className="w-3 h-3 text-[#B45309]" />
+                            src/content/pages/{page.fileName}
+                          </span>
+                          <span>{page.date}</span>
+                        </div>
+
+                        <h3
+                          onClick={() => openPageBySlug(page.slug)}
+                          className="font-serif-display text-2xl font-semibold text-[#1C1917] group-hover:text-[#B45309] transition-colors cursor-pointer leading-snug"
+                        >
+                          {page.title}
+                        </h3>
+
+                        <p className="text-sm text-[#57534E] leading-relaxed line-clamp-2">
+                          {page.summary}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="px-6 pb-6 pt-3 border-t border-[#E7E5E0] flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        onClick={() => openPageBySlug(page.slug)}
+                        className="inline-flex items-center gap-1.5 bg-[#1C1917] text-[#FAF9F6] px-4 py-2 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors cursor-pointer"
+                      >
+                        <span>Open Page &amp; Shop</span>
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copyPagePinterestUrl(page.slug)}
+                          className="inline-flex items-center gap-1 border border-[#D6D3CD] bg-[#FAF9F6] px-2.5 py-2 text-xs font-mono text-[#1C1917] hover:border-[#1C1917] cursor-pointer"
+                          title="Copy Destination URL for Pinterest Pin"
+                        >
+                          {copiedUrlSlug === page.slug ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-[#15803D]" /> Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" /> Copy Pin URL
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => setPinModalPage(page)}
+                          className="inline-flex items-center gap-1 border border-[#B45309] text-[#B45309] px-2.5 py-2 text-xs font-mono uppercase hover:bg-[#B45309] hover:text-[#FAF9F6] transition-colors cursor-pointer"
+                        >
+                          <Bookmark className="w-3.5 h-3.5" /> 2:3 Pin
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Quick-Shop Master Amazon Affiliate Directory (Loaded from src/content/affiliate-links.txt) */}
+            <section className="pt-8 border-t border-[#E7E5E0] space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                <div>
+                  <span className="font-mono text-xs uppercase tracking-widest text-[#B45309]">
+                    Source: src/content/affiliate-links.txt
+                  </span>
+                  <h2 className="font-serif-display text-2xl sm:text-3xl font-semibold text-[#1C1917] mt-1">
+                    Direct Amazon Quick-Shop Directory
+                  </h2>
+                  <p className="text-xs text-[#57534E]">
+                    Individual high-converting Amazon finds stored in your <code className="font-mono">affiliate-links.txt</code> flat file.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setActiveView('quick-links')}
+                  className="font-mono text-xs uppercase tracking-wider text-[#1C1917] underline hover:text-[#B45309] cursor-pointer"
+                >
+                  View Full Direct Links Directory ({quickLinks.length}) →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {filteredQuickLinks.slice(0, 8).map((item) => {
+                  const affiliateHref = formatAmazonAffiliateUrl(
+                    item.amazonUrl,
+                    amazonTag
+                  );
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-[#F3F1EC] border border-[#E7E5E0] flex flex-col justify-between group hover:border-[#1C1917] transition-colors"
+                    >
+                      <div>
+                        <div className="relative aspect-square bg-[#FAF9F6] border-b border-[#E7E5E0] overflow-hidden">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                            }}
+                            className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-500"
+                          />
+                          {item.badge && (
+                            <span className="absolute top-2.5 left-2.5 bg-[#FAF9F6]/95 border border-[#E7E5E0] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[#B45309]">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="p-4 space-y-1.5">
+                          <div className="flex items-center justify-between font-mono text-xs">
+                            <span className="text-[#57534E] text-[11px]">
+                              {item.category}
+                            </span>
+                            <span className="font-semibold text-[#1C1917] tabular-nums">
+                              {item.price}
+                            </span>
+                          </div>
+                          <h3 className="font-serif-display text-base font-semibold text-[#1C1917] leading-snug line-clamp-2">
+                            {item.name}
+                          </h3>
+                          <p className="text-xs text-[#57534E] line-clamp-2 leading-relaxed">
+                            {item.verdict}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 pt-0">
+                        <a
+                          href={affiliateHref}
+                          target="_blank"
+                          rel="noopener noreferrer sponsored"
+                          className="w-full inline-flex items-center justify-between bg-[#1C1917] text-[#FAF9F6] px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors"
+                        >
+                          <span>Shop on Amazon</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* VIEW 3: DIRECT AMAZON AFFILIATE LINKS DIRECTORY (src/content/affiliate-links.txt) */}
+        {activeView === 'quick-links' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+            <div className="border-b border-[#E7E5E0] pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-widest text-[#B45309]">
+                  Flat File Source: src/content/affiliate-links.txt
+                </p>
+                <h1 className="font-serif-display text-3xl sm:text-4xl font-semibold text-[#1C1917] mt-1">
+                  Direct Amazon Affiliate Links Directory
+                </h1>
+                <p className="text-sm text-[#57534E] mt-1">
+                  All products below are loaded directly from <code className="font-mono text-xs">src/content/affiliate-links.txt</code> with your <code className="font-mono text-xs">?tag={amazonTag}</code> attached.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setActiveView('studio')}
+                className="inline-flex items-center gap-1.5 bg-[#1C1917] text-[#FAF9F6] px-4 py-2.5 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] cursor-pointer"
+              >
+                <FilePlus2 className="w-3.5 h-3.5" />
+                Add / Edit Links in affiliate-links.txt
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {quickLinks.map((item) => {
+                const affiliateHref = formatAmazonAffiliateUrl(
+                  item.amazonUrl,
+                  amazonTag
+                );
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-[#F3F1EC] border border-[#E7E5E0] flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="aspect-square bg-[#FAF9F6] border-b border-[#E7E5E0] overflow-hidden">
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = FALLBACK_IMAGE_DATA_URI;
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <div className="flex items-center justify-between font-mono text-xs">
+                          <span className="text-[#B45309]">{item.badge}</span>
+                          <span className="font-semibold text-[#1C1917] tabular-nums">
+                            {item.price}
+                          </span>
+                        </div>
+                        <h3 className="font-serif-display text-base font-semibold text-[#1C1917]">
+                          {item.name}
+                        </h3>
+                        <p className="text-xs text-[#57534E] leading-relaxed">
+                          {item.verdict}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 pt-0">
+                      <a
+                        href={affiliateHref}
+                        target="_blank"
+                        rel="noopener noreferrer sponsored"
+                        className="w-full inline-flex items-center justify-between bg-[#1C1917] text-[#FAF9F6] px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors"
+                      >
+                        <span>Buy on Amazon</span>
+                        <ArrowUpRight className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 4: FLAT-FILE PAGE BUILDER STUDIO */}
+        {activeView === 'studio' && (
+          <PageBuilderStudio
+            pages={allPages}
+            quickLinks={quickLinks}
+            amazonTag={amazonTag}
+            initialEditPage={studioEditPage}
+            onSavePagePreview={handleSaveCustomPage}
+            onDeleteCustomPage={handleDeleteCustomPage}
+            onSaveQuickLinksPreview={handleSaveQuickLinks}
+            onOpenPage={openPageBySlug}
+          />
+        )}
+
+        {/* VIEW 5: HOW IT WORKS & STATIC HOSTING PLAYBOOK */}
+        {activeView === 'guide' && (
+          <FlatFileGuideView
+            amazonTag={amazonTag}
+            onGoToBuilder={() => setActiveView('studio')}
+          />
+        )}
+      </main>
+
+      {/* Editorial Footer */}
+      <footer className="bg-[#F3F1EC] border-t border-[#E7E5E0] mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-1.5 max-w-xl">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4 text-[#B45309]" />
+              <span className="font-serif-display text-xl font-semibold text-[#1C1917]">
+                {initialBundle.config.siteName}
+              </span>
+            </div>
+            <p className="text-xs text-[#57534E] leading-relaxed">
+              {initialBundle.config.subtitle}
+            </p>
+            <p className="font-mono text-[11px] text-[#57534E]">
+              Flat-File Architecture: <code>src/content/site-config.txt</code> •{' '}
+              <code>src/content/affiliate-links.txt</code> •{' '}
+              <code>src/content/pages/*.txt</code>
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {STARTER_PROJECTS.map((preset) => {
-              const presetFrames = getProjectTotalFrames(preset);
-              const isCurrent = preset.id === project.id;
-              return (
-                <div
-                  key={preset.id}
-                  className={`rounded-xl p-6 border flex flex-col justify-between space-y-5 transition-colors ${
-                    isCurrent
-                      ? 'bg-slate-900 border-amber-500/80'
-                      : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-400">
-                      <span className="text-amber-400">
-                        {preset.scenes.length} Scenes
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span>{presetFrames} Frames</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{(presetFrames / 24).toFixed(1)}s</span>
-                    </div>
-
-                    <h2 className="text-lg font-bold text-slate-100 font-display">
-                      {preset.title}
-                    </h2>
-
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {preset.logline}
-                    </p>
-
-                    <div className="pt-2 flex items-center gap-2 text-xs text-slate-400">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span>{preset.visualStyle}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProject(preset);
-                      setSelectedSceneId(preset.scenes[0].id);
-                      setCurrentFrame(0);
-                      setIsPlaying(true);
-                      setActiveView('studio');
-                    }}
-                    className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Film className="w-4 h-4" />
-                    <span>Load into Studio</span>
-                  </button>
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => {
+                setStudioEditPage(null);
+                setActiveView('studio');
+              }}
+              className="px-4 py-2 text-xs font-mono uppercase tracking-wider bg-[#1C1917] text-[#FAF9F6] hover:bg-[#B45309] transition-colors cursor-pointer"
+            >
+              + Add New Page (.txt)
+            </button>
+            <button
+              onClick={() => setActiveView('guide')}
+              className="px-4 py-2 text-xs font-mono uppercase tracking-wider border border-[#D6D3CD] bg-[#FAF9F6] text-[#1C1917] hover:border-[#1C1917] cursor-pointer"
+            >
+              Hosting &amp; Pinterest Setup
+            </button>
           </div>
-        </main>
-      )}
+        </div>
+      </footer>
 
-      {/* Video Export Modal */}
-      {isExportModalOpen && (
-        <VideoExportModal
-          project={project}
-          renderOptions={renderOptions}
-          onClose={() => setIsExportModalOpen(false)}
+      {/* 2:3 Pinterest Pin & Destination Link Modal */}
+      {pinModalPage && (
+        <PinStudioModal
+          page={pinModalPage}
+          siteName={initialBundle.config.siteName}
+          onClose={() => setPinModalPage(null)}
         />
       )}
     </div>
   );
 }
+
+export default App;

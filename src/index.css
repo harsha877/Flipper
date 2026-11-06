@@ -1,21 +1,20 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
-    --font-display: 'Outfit', sans-serif;
-    --font-sans: 'Plus Jakarta Sans', sans-serif;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: #0b0f17;
-    color: #f1f5f9;
+    background-color: #FAF9F6;
+    color: #1C1917;
     overflow-x: hidden;
   }
 
-  h1, h2, h3, h4, .font-display {
+  h1, h2, h3, h4, .font-serif-display {
     font-family: var(--font-display);
   }
 
@@ -25,21 +24,20 @@
   }
 }
 
-/* Custom sleek studio scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f17;
+  background: #FAF9F6;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #D6D3CD;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #A8A29E;
 }

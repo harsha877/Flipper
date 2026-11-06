@@ -1,0 +1,12 @@
+# ============================================================================
+# RETUNDA — GLOBAL SITE CONFIGURATION (PLAIN TEXT FILE)
+# Edit any value below. Every Amazon link across your website automatically
+# attaches your AMAZON_TAG so you earn commissions on every click.
+# ============================================================================
+
+SITE_NAME: Retunda
+TAGLINE: Curated Home, Lifestyle & Aesthetic Amazon Finds
+SUBTITLE: Warm minimalist objects, architectural home accents, and daily tactile rituals sourced on Amazon.
+AMAZON_TAG: retunda-20
+PINTEREST_PROFILE: https://www.pinterest.com/retunda
+INSTAGRAM_URL: https://www.instagram.com/retunda
