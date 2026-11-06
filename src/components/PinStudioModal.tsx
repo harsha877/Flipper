@@ -142,7 +142,7 @@ export const PinStudioModal: React.FC<PinStudioModalProps> = ({
 
         ctx.fillStyle = '#57534E';
         ctx.font = '600 24px "JetBrains Mono", monospace';
-        ctx.fillText(`${siteName.toUpperCase()} • CURATED AMAZON EDIT`, 80, H - 58);
+        ctx.fillText(siteName.toUpperCase(), 80, H - 58);
       } else if (template === 'listicle') {
         // Full Bleed Image with Editorial Center Card
         if (img) {

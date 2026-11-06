@@ -1,6 +1,6 @@
 {
-  "summary": "Revised implementation plan for Retunda: a pure React frontend Pinterest-to-Amazon affiliate marketing website powered by flat text files in a dedicated content folder (no backend server or database), with dynamic URL routing for Pinterest pins and an in-app Page Builder that generates flat text files.",
-  "updatedAt": "2026-11-06T04:26:18.198290794Z",
+  "summary": "Updated implementation plan for Retunda to hide all page builder, Pin generator, file paths, and Amazon tag controls behind a secret URL query key (?admin=retunda) and passcode gate while keeping all pages and affiliate links in src/content/ flat text files.",
+  "updatedAt": "2026-11-06T04:50:14.843374644Z",
   "requestFeedback": true,
   "userFacing": true
 }

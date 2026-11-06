@@ -6,6 +6,8 @@ export interface SiteConfig {
   pinterestProfile: string;
   instagramUrl: string;
   ftcDisclosure: string;
+  adminKey: string;
+  adminPasscode: string;
 }
 
 export interface AffiliateProduct {
@@ -104,18 +106,21 @@ function parseKeyValueLines(block: string): Record<string, string> {
 
 export function parseSiteConfig(rawText: string): SiteConfig {
   const map = parseKeyValueLines(rawText);
+  const envPasscode =
+    (import.meta as unknown as { env?: Record<string, string> }).env
+      ?.VITE_ADMIN_PASSCODE || '';
   return {
     siteName: map['SITE_NAME'] || 'Retunda',
-    tagline: map['TAGLINE'] || 'Curated Home, Lifestyle & Aesthetic Amazon Finds',
+    tagline: map['TAGLINE'] || 'Curated Home, Lifestyle & Aesthetic Finds',
     subtitle:
       map['SUBTITLE'] ||
       'Warm minimalist objects, architectural home accents, and daily tactile rituals sourced on Amazon.',
     amazonTag: map['AMAZON_TAG'] || 'retunda-20',
     pinterestProfile: map['PINTEREST_PROFILE'] || 'https://www.pinterest.com/retunda',
     instagramUrl: map['INSTAGRAM_URL'] || 'https://www.instagram.com/retunda',
-    ftcDisclosure:
-      map['FTC_DISCLOSURE'] ||
-      'As an Amazon Associate, Retunda earns from qualifying purchases made through links on this site at no additional cost to you.',
+    ftcDisclosure: map['FTC_DISCLOSURE'] || '',
+    adminKey: map['ADMIN_KEY'] || 'retunda',
+    adminPasscode: envPasscode || map['ADMIN_PASSCODE'] || 'retunda2026',
   };
 }
 
