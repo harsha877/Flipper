@@ -8,6 +8,10 @@ export interface SiteConfig {
   ftcDisclosure: string;
   adminKey: string;
   adminVault: string;
+  githubOwner: string;
+  githubRepo: string;
+  githubBranch: string;
+  githubFolder: string;
 }
 
 export interface AffiliateProduct {
@@ -24,6 +28,7 @@ export interface AffiliateProduct {
 export interface RetundaPage {
   slug: string;
   fileName: string;
+  directoryPath?: string;
   title: string;
   category: string;
   date: string;
@@ -36,9 +41,10 @@ export interface RetundaPage {
   products: AffiliateProduct[];
   rawText: string;
   isCustomLocal?: boolean;
+  isRemoteGitHub?: boolean;
 }
 
-// Dynamically import all .txt files in /src/content/ via Vite's eager raw glob
+// Dynamically import all .txt files in /src/content/ (including nested subfolders) via Vite's eager raw glob
 const rawSiteConfigFiles = import.meta.glob('/src/content/site-config.txt', {
   query: '?raw',
   import: 'default',
@@ -51,7 +57,7 @@ const rawAffiliateLinksFiles = import.meta.glob('/src/content/affiliate-links.tx
   eager: true,
 }) as Record<string, string>;
 
-const rawPageFiles = import.meta.glob('/src/content/pages/*.txt', {
+const rawPageFiles = import.meta.glob('/src/content/pages/**/*.txt', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -62,25 +68,35 @@ export function extractAsin(input: string): string | null {
   if (/^[A-Z0-9]{10}$/i.test(trimmed)) {
     return trimmed.toUpperCase();
   }
-  const match = trimmed.match(/(?:\/dp\/|\/gp\/product\/|\/exec\/obidos\/asin\/|\/product\/)([A-Z0-9]{10})/i);
+  const match = trimmed.match(
+    /(?:\/dp\/|\/gp\/product\/|\/exec\/obidos\/asin\/|\/product\/)([A-Z0-9]{10})/i
+  );
   if (match && match[1]) {
     return match[1].toUpperCase();
   }
   return null;
 }
 
-export function formatAmazonAffiliateUrl(rawInput: string, associateTag: string): string {
+export function formatAmazonAffiliateUrl(
+  rawInput: string,
+  associateTag: string
+): string {
   const cleanTag = (associateTag || 'retunda-20').trim();
   const trimmed = rawInput.trim();
-  if (!trimmed) return `https://www.amazon.com/?tag=${encodeURIComponent(cleanTag)}`;
+  if (!trimmed)
+    return `https://www.amazon.com/?tag=${encodeURIComponent(cleanTag)}`;
 
   const asin = extractAsin(trimmed);
   if (asin) {
-    return `https://www.amazon.com/dp/${asin}?tag=${encodeURIComponent(cleanTag)}`;
+    return `https://www.amazon.com/dp/${asin}?tag=${encodeURIComponent(
+      cleanTag
+    )}`;
   }
 
   try {
-    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    const url = new URL(
+      trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
+    );
     url.searchParams.set('tag', cleanTag);
     return url.toString();
   } catch {
@@ -108,18 +124,25 @@ export function parseSiteConfig(rawText: string): SiteConfig {
   const map = parseKeyValueLines(rawText);
   return {
     siteName: map['SITE_NAME'] || 'Retunda',
-    tagline: map['TAGLINE'] || 'Curated Home, Lifestyle & Aesthetic Finds',
+    tagline:
+      map['TAGLINE'] || 'Curated Objects & Elevated Everyday Living',
     subtitle:
       map['SUBTITLE'] ||
-      'Warm minimalist objects, architectural home accents, and daily tactile rituals sourced on Amazon.',
+      'Thoughtfully sourced home, kitchen, and lifestyle essentials.',
     amazonTag: map['AMAZON_TAG'] || 'retunda-20',
-    pinterestProfile: map['PINTEREST_PROFILE'] || 'https://www.pinterest.com/retunda',
-    instagramUrl: map['INSTAGRAM_URL'] || 'https://www.instagram.com/retunda',
+    pinterestProfile:
+      map['PINTEREST_PROFILE'] || 'https://www.pinterest.com/retunda',
+    instagramUrl:
+      map['INSTAGRAM_URL'] || 'https://www.instagram.com/retunda',
     ftcDisclosure: map['FTC_DISCLOSURE'] || '',
     adminKey: map['ADMIN_KEY'] || 'retunda',
     adminVault:
       map['ADMIN_VAULT'] ||
       'v1:9AOhaHdO5kvqZ7z4oVv5rg==:237NxWfamAZ6XksD:7M3UG+BcaX4pmQBj0c4An1kl1/f2gtbehZaOLVhzRvyvFf27/TA1KSUY3ajtnlmYZQKu0xoGOwI=',
+    githubOwner: map['GITHUB_OWNER'] || '',
+    githubRepo: map['GITHUB_REPO'] || '',
+    githubBranch: map['GITHUB_BRANCH'] || 'main',
+    githubFolder: map['GITHUB_FOLDER'] || 'src/content/pages',
   };
 }
 
@@ -151,10 +174,26 @@ export function parsePageTxt(rawText: string, filePath = ''): RetundaPage {
   const productParts = parts.slice(1);
 
   const header = parseKeyValueLines(headerPart);
-  const inferredFileName =
-    filePath.split('/').pop() || `${header['SLUG'] || 'new-page'}.txt`;
+
+  // Extract relative slug from /src/content/pages/... if present
+  const normalizedPath = filePath.replace(/^\/+/, '');
+  const basePrefix = 'src/content/pages/';
+  const relativeFromPages = normalizedPath.startsWith(basePrefix)
+    ? normalizedPath.slice(basePrefix.length)
+    : filePath.split('/').pop() || `${header['SLUG'] || 'new-page'}.txt`;
+
+  const inferredFileName = relativeFromPages.endsWith('.txt')
+    ? relativeFromPages
+    : `${relativeFromPages}.txt`;
+
   const inferredSlug =
-    header['SLUG'] || inferredFileName.replace(/\.txt$/i, '').toLowerCase();
+    relativeFromPages.includes('/')
+      ? relativeFromPages.replace(/\.txt$/i, '').toLowerCase()
+      : header['SLUG'] || inferredFileName.replace(/\.txt$/i, '').toLowerCase();
+
+  const slashIdx = normalizedPath.lastIndexOf('/');
+  const directoryPath =
+    slashIdx !== -1 ? normalizedPath.slice(0, slashIdx) : 'src/content/pages';
 
   const products: AffiliateProduct[] = productParts
     .map((chunk, index) => {
@@ -168,7 +207,8 @@ export function parsePageTxt(rawText: string, filePath = ''): RetundaPage {
         image:
           pMap['IMAGE'] ||
           'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=900&q=80',
-        amazonUrl: pMap['AMAZON_URL'] || 'https://www.amazon.com/?tag=retunda-20',
+        amazonUrl:
+          pMap['AMAZON_URL'] || 'https://www.amazon.com/?tag=retunda-20',
         verdict: pMap['VERDICT'] || pMap['NOTE'] || '',
       };
     })
@@ -177,16 +217,20 @@ export function parsePageTxt(rawText: string, filePath = ''): RetundaPage {
   return {
     slug: inferredSlug,
     fileName: inferredFileName,
+    directoryPath,
     title: header['TITLE'] || 'Untitled Curated Edit',
     category: header['CATEGORY'] || 'Living Room',
-    date: header['DATE'] || '2026-11-05',
-    readTime: header['READ_TIME'] || `${Math.max(2, Math.ceil(products.length * 0.5))} min read`,
+    date: header['DATE'] || '2026-11-06',
+    readTime:
+      header['READ_TIME'] ||
+      `${Math.max(2, Math.ceil(products.length * 0.5))} min read`,
     heroImage:
       header['HERO_IMAGE'] ||
       products[0]?.image ||
       'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1400&q=85',
     summary: header['SUMMARY'] || '',
-    pinTitle: header['PIN_TITLE'] || header['TITLE'] || 'Curated Amazon Home Finds',
+    pinTitle:
+      header['PIN_TITLE'] || header['TITLE'] || 'Curated Amazon Home Finds',
     pinDescription: header['PIN_DESCRIPTION'] || header['SUMMARY'] || '',
     pinBoard: header['PIN_BOARD'] || `${header['CATEGORY'] || 'Home'} Decor Ideas`,
     products,
@@ -194,7 +238,9 @@ export function parsePageTxt(rawText: string, filePath = ''): RetundaPage {
   };
 }
 
-export function serializePageToTxt(page: Omit<RetundaPage, 'rawText' | 'fileName'>): string {
+export function serializePageToTxt(
+  page: Omit<RetundaPage, 'rawText' | 'fileName'>
+): string {
   const headerLines = [
     `TITLE: ${page.title.trim()}`,
     `SLUG: ${page.slug.trim()}`,
@@ -223,7 +269,9 @@ export function serializePageToTxt(page: Omit<RetundaPage, 'rawText' | 'fileName
   return `${headerLines.join('\n')}\n\n${productBlocks.join('\n\n')}\n`;
 }
 
-export function serializeAffiliateLinksToTxt(links: AffiliateProduct[]): string {
+export function serializeAffiliateLinksToTxt(
+  links: AffiliateProduct[]
+): string {
   const header = [
     '# ============================================================================',
     '# RETUNDA — MASTER DIRECT AMAZON AFFILIATE LINKS (PLAIN TEXT FILE)',

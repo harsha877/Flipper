@@ -2,5 +2,7 @@
   "name": "CelFrame 24 — AI Storyboard & 24 FPS Animation Studio",
   "description": "Retunda — A curated Home Decor, Lifestyle & Aesthetic Amazon Affiliate Storefront powered by flat text files and dynamic Pinterest landing pages.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

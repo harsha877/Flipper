@@ -1,6 +1,6 @@
 // Web Crypto API (PBKDF2-SHA256 + AES-256-GCM) Zero-Plaintext Creator Authentication
-// Your password is never stored in code or text files. Instead, only an encrypted
-// ciphertext token (v1:<salt_b64>:<iv_b64>:<cipher_b64>) is stored in site-config.txt.
+// Your password (and optional GitHub Personal Access Token) are never stored in plain text.
+// Only an encrypted ciphertext token (v1:<salt_b64>:<iv_b64>:<cipher_b64>) is stored in site-config.txt.
 
 const PBKDF2_ITERATIONS = 100000;
 
@@ -50,7 +50,7 @@ async function deriveAesGcmKey(
 
 export async function encryptCreatorVault(
   password: string,
-  customSecretMessage = 'Retunda Creator Studio Access Granted'
+  options?: { githubPat?: string; customSecretMessage?: string }
 ): Promise<{ token: string; payloadJson: string }> {
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -59,7 +59,8 @@ export async function encryptCreatorVault(
   const payloadJson = JSON.stringify({
     verified: true,
     site: 'Retunda',
-    message: customSecretMessage,
+    message: options?.customSecretMessage || 'Retunda Creator Studio Access Granted',
+    githubPat: options?.githubPat?.trim() || undefined,
     v: 1,
   });
 
@@ -81,7 +82,7 @@ export async function encryptCreatorVault(
 export async function decryptCreatorVault(
   password: string,
   vaultToken: string
-): Promise<{ ok: boolean; decryptedText?: string }> {
+): Promise<{ ok: boolean; decryptedText?: string; githubPat?: string }> {
   try {
     const cleanToken = vaultToken.trim();
     const parts = cleanToken.split(':');
@@ -103,10 +104,17 @@ export async function decryptCreatorVault(
 
     const decoder = new TextDecoder();
     const decryptedText = decoder.decode(decryptedBuffer);
-    const parsed = JSON.parse(decryptedText) as { verified?: boolean };
+    const parsed = JSON.parse(decryptedText) as {
+      verified?: boolean;
+      githubPat?: string;
+    };
 
     if (parsed && parsed.verified === true) {
-      return { ok: true, decryptedText };
+      return {
+        ok: true,
+        decryptedText,
+        githubPat: parsed.githubPat,
+      };
     }
     return { ok: false };
   } catch {

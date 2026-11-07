@@ -4,7 +4,7 @@ import { decryptCreatorVault } from '../utils/cryptoAuth';
 
 interface AdminPasscodeModalProps {
   vaultToken: string;
-  onSuccess: () => void;
+  onSuccess: (decryptedGithubPat?: string) => void;
   onClose: () => void;
 }
 
@@ -28,7 +28,7 @@ export const AdminPasscodeModal: React.FC<AdminPasscodeModalProps> = ({
     setIsDecrypting(false);
 
     if (result.ok) {
-      onSuccess();
+      onSuccess(result.githubPat);
     } else {
       setError(
         'AES-256-GCM Decryption failed: Invalid password. Could not authenticate ADMIN_VAULT cipher.'

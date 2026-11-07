@@ -1,6 +1,6 @@
 {
-  "summary": "Updated implementation plan replacing plaintext ADMIN_PASSCODE in site-config.txt with Web Crypto API PBKDF2 + AES-256-GCM authenticated decryption so the creator password is never stored in code or the client bundle.",
-  "updatedAt": "2026-11-06T04:58:32.438773407Z",
+  "summary": "Updated implementation plan simplifying Editor Mode into a clean 3-Step Guided Wizard (1. Download instruction.md -> 2. Upload AI .txt File -> 3. Select Directory Path & Publish to GitHub) with all manual templates/forms removed, plus safe GitHub credential handling.",
+  "updatedAt": "2026-11-07T00:33:42.405667070Z",
   "requestFeedback": true,
   "userFacing": true
 }
