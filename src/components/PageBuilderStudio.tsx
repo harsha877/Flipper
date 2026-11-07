@@ -25,6 +25,7 @@ import {
 import { encryptCreatorVault } from '../utils/cryptoAuth';
 import { generateAiInstructionMd } from '../utils/instructionMdGenerator';
 import {
+  diagnoseGitHubConnection,
   GitHubRepoConfig,
   normalizeRepoPath,
   savePageToGitHub,
@@ -36,6 +37,7 @@ interface PageBuilderStudioProps {
   onUpdateGithubConfig: (next: GitHubRepoConfig) => void;
   onSavePagePreview: (page: RetundaPage) => void;
   onOpenPage: (slug: string) => void;
+  onRequestVaultUnlock?: () => void;
 }
 
 const DIRECTORY_PRESETS = [
@@ -76,6 +78,7 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
   onUpdateGithubConfig,
   onSavePagePreview,
   onOpenPage,
+  onRequestVaultUnlock,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -112,6 +115,12 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
     null
   );
   const [copiedVault, setCopiedVault] = useState<boolean>(false);
+  const [isTestingGithub, setIsTestingGithub] = useState<boolean>(false);
+  const [diagResult, setDiagResult] = useState<{
+    ok: boolean;
+    summary: string;
+    details: string[];
+  } | null>(null);
 
   // Step 1: Download or Copy instruction.md
   const handleDownloadInstructionMd = () => {
@@ -217,6 +226,19 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
   // Step 3: Publish to GitHub or Preview
   const handlePublishToGitHub = async () => {
     if (!uploadedPage) return;
+
+    // If token isn't decrypted into memory yet (e.g. site-config.txt was updated after unlocking), open password modal to decrypt ADMIN_VAULT!
+    if (!githubConfig.token || !githubConfig.token.trim()) {
+      if (onRequestVaultUnlock) {
+        onRequestVaultUnlock();
+      }
+      setPublishStatus({
+        ok: false,
+        message:
+          'Please enter your Creator Password in the popup to decrypt your GitHub Token from ADMIN_VAULT, then click Publish again.',
+      });
+      return;
+    }
 
     setIsPublishingGithub(true);
     setPublishStatus(null);
@@ -410,6 +432,48 @@ export const PageBuilderStudio: React.FC<PageBuilderStudioProps> = ({
                   className="w-full bg-[#FAF9F6] border border-[#E7E5E0] px-2.5 py-1.5 font-mono text-xs text-[#1C1917]"
                 />
               </div>
+
+              <button
+                type="button"
+                disabled={isTestingGithub}
+                onClick={async () => {
+                  setIsTestingGithub(true);
+                  const res = await diagnoseGitHubConnection(githubConfig);
+                  setIsTestingGithub(false);
+                  setDiagResult(res);
+                  if (
+                    res.detectedBranch &&
+                    res.detectedBranch !== githubConfig.branch
+                  ) {
+                    onUpdateGithubConfig({
+                      ...githubConfig,
+                      branch: res.detectedBranch,
+                    });
+                  }
+                }}
+                className="w-full bg-[#1C1917] text-[#FAF9F6] px-4 py-2 text-xs font-mono uppercase tracking-wider hover:bg-[#B45309] transition-colors cursor-pointer"
+              >
+                {isTestingGithub
+                  ? 'Testing GitHub API...'
+                  : 'Test & Diagnose GitHub Connection'}
+              </button>
+
+              {diagResult && (
+                <div
+                  className={`p-3 border text-xs font-mono space-y-1.5 ${
+                    diagResult.ok
+                      ? 'bg-[#15803D]/10 border-[#15803D]/30 text-[#15803D]'
+                      : 'bg-[#B91C1C]/10 border-[#B91C1C]/30 text-[#B91C1C]'
+                  }`}
+                >
+                  <div className="font-semibold">{diagResult.summary}</div>
+                  {diagResult.details.map((line, i) => (
+                    <div key={i} className="text-[11px] text-[#1C1917]">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Optional AES-256-GCM Vault Encryptor */}

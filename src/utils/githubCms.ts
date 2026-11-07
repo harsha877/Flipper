@@ -52,6 +52,128 @@ function buildHeaders(token?: string): Record<string, string> {
   return headers;
 }
 
+export async function diagnoseGitHubConnection(
+  config: GitHubRepoConfig
+): Promise<{
+  ok: boolean;
+  summary: string;
+  details: string[];
+  detectedBranch?: string;
+}> {
+  const details: string[] = [];
+  const token = (config.token || '').trim();
+
+  if (!token) {
+    return {
+      ok: false,
+      summary: 'No GitHub Personal Access Token is currently loaded in memory.',
+      details: [
+        'Click "Lock Editor" in the top bar and log in again with your password to decrypt your token from ADMIN_VAULT, OR paste your token directly into the Fine-Grained Token field.',
+      ],
+    };
+  }
+
+  try {
+    // Step 1: Verify token identity (/user)
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: buildHeaders(token),
+      cache: 'no-store',
+    });
+
+    if (!userRes.ok) {
+      return {
+        ok: false,
+        summary: `Token Authentication Failed (HTTP ${userRes.status})`,
+        details: [
+          'GitHub rejected your Personal Access Token. Make sure you copied the full token (starting with github_pat_ or ghp_) and that it has not expired.',
+        ],
+      };
+    }
+
+    const userData = (await userRes.json()) as { login?: string };
+    const oauthScopes = userRes.headers.get('x-oauth-scopes') || '(Fine-grained token)';
+    details.push(`✓ Token authenticated as GitHub user: @${userData.login}`);
+    details.push(`✓ Token scopes: ${oauthScopes}`);
+
+    // Step 2: Check repository visibility and permissions
+    const repoUrl = `https://api.github.com/repos/${encodeURIComponent(
+      config.owner
+    )}/${encodeURIComponent(config.repo)}`;
+    const repoRes = await fetch(repoUrl, {
+      headers: buildHeaders(token),
+      cache: 'no-store',
+    });
+
+    if (!repoRes.ok) {
+      details.push(
+        `✗ Cannot access repository "${config.owner}/${config.repo}" (HTTP ${repoRes.status}).`
+      );
+      if (oauthScopes !== '(Fine-grained token)' && !oauthScopes.includes('repo')) {
+        details.push(
+          `CAUSE FOUND: Your token only has "${oauthScopes}" scope, and "${config.owner}/${config.repo}" is a PRIVATE repository. Either make "${config.owner}/${config.repo}" PUBLIC in GitHub Settings, or generate a token with full "repo" scope.`
+        );
+      } else {
+        details.push(
+          `CAUSE FOUND: "${config.owner}/${config.repo}" is a Private repository and this Fine-Grained Token was not granted access to "${config.repo}". Edit your token on GitHub -> Repository access -> Select "${config.repo}" -> Repository permissions -> Contents: Read and write.`
+        );
+      }
+      return {
+        ok: false,
+        summary: `Token works for @${userData.login}, but does not have access to Private repo "${config.owner}/${config.repo}".`,
+        details,
+      };
+    }
+
+    const repoData = (await repoRes.json()) as {
+      private?: boolean;
+      default_branch?: string;
+      size?: number;
+      permissions?: { push?: boolean; admin?: boolean; pull?: boolean };
+    };
+
+    details.push(
+      `✓ Repository found: ${config.owner}/${config.repo} (${
+        repoData.private ? 'PRIVATE repo' : 'PUBLIC repo'
+      })`
+    );
+    details.push(`✓ Default branch on GitHub: "${repoData.default_branch || 'main'}"`);
+
+    if (repoData.private) {
+      details.push(
+        `⚠ Note: Because "${config.owner}/${config.repo}" is currently PRIVATE, public Pinterest visitors (who don't have your token) won't be able to load pages unless you change the repo visibility to PUBLIC in GitHub Settings.`
+      );
+    }
+
+    if (repoData.permissions && repoData.permissions.push === false) {
+      details.push(
+        `✗ CAUSE FOUND: Your token has READ-ONLY access to "${config.owner}/${config.repo}" (permissions.push = false). On GitHub, edit your Personal Access Token -> Repository permissions -> set "Contents" to "Read and write".`
+      );
+      return {
+        ok: false,
+        summary: `Your token only has Read-Only permission on "${config.owner}/${config.repo}". Enable "Contents: Read and write".`,
+        details,
+        detectedBranch: repoData.default_branch,
+      };
+    }
+
+    details.push(`✓ Write permission confirmed (permissions.push = true)!`);
+    return {
+      ok: true,
+      summary: `Connection verified! Ready to publish to ${config.owner}/${config.repo} (branch: ${
+        repoData.default_branch || config.branch
+      }).`,
+      details,
+      detectedBranch: repoData.default_branch,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      summary: err instanceof Error ? err.message : 'Network error testing GitHub API',
+      details,
+    };
+  }
+}
+
 /**
  * Fetches a single .txt page from GitHub on demand when a visitor opens /?page=<slug>
  * Supports both top-level slugs (?page=cozy-linen-living-room) and subfolder slugs (?page=living-room/cozy-linen).
@@ -246,8 +368,9 @@ export async function savePageToGitHub(
   try {
     // 1. Check if file already exists so we can pass its SHA to update it
     let existingSha: string | undefined;
+    const targetBranch = (config.branch || 'main').trim();
     const checkRes = await fetch(
-      `${apiUrl}?ref=${encodeURIComponent(config.branch || 'main')}`,
+      `${apiUrl}?ref=${encodeURIComponent(targetBranch)}`,
       {
         headers: buildHeaders(config.token),
         cache: 'no-store',
@@ -262,13 +385,13 @@ export async function savePageToGitHub(
     const bodyPayload: Record<string, string> = {
       message: `${existingSha ? 'Update' : 'Add'} Retunda page: ${fullPath}`,
       content: encodeUtf8ToBase64(rawTxtContent),
-      branch: config.branch || 'main',
+      branch: targetBranch,
     };
     if (existingSha) {
       bodyPayload.sha = existingSha;
     }
 
-    const putRes = await fetch(apiUrl, {
+    let putRes = await fetch(apiUrl, {
       method: 'PUT',
       headers: {
         ...buildHeaders(config.token),
@@ -277,15 +400,46 @@ export async function savePageToGitHub(
       body: JSON.stringify(bodyPayload),
     });
 
+    // If branch 'main' was not found (e.g. default branch is 'master' or initial commit), retry without explicit branch
+    if (!putRes.ok && putRes.status === 404) {
+      const retryPayload: Record<string, string> = {
+        message: `${existingSha ? 'Update' : 'Add'} Retunda page: ${fullPath}`,
+        content: encodeUtf8ToBase64(rawTxtContent),
+      };
+      if (existingSha) {
+        retryPayload.sha = existingSha;
+      }
+      const retryRes = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          ...buildHeaders(config.token),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(retryPayload),
+      });
+      if (retryRes.ok) {
+        putRes = retryRes;
+      }
+    }
+
     if (!putRes.ok) {
       const errBody = (await putRes.json().catch(() => ({}))) as {
         message?: string;
       };
+      const rawMsg = errBody.message || putRes.statusText;
+      const acceptedPerms =
+        putRes.headers.get('x-accepted-github-permissions') || '';
+      let hint = '';
+      if (putRes.status === 404 || putRes.status === 403) {
+        hint = ` — Your Fine-Grained Token is missing "Contents: Read and write" permission! (Right now you enabled "Actions: Read and write" instead of "Contents: Read and write"). Go to GitHub -> Settings -> Developer settings -> Fine-grained tokens -> click your token -> Edit permissions -> scroll down to "Contents" -> set to "Read and write" and click Save.${
+          acceptedPerms ? ` [GitHub requires: ${acceptedPerms}]` : ''
+        }`;
+      } else if (putRes.status === 401) {
+        hint = ` — Your GitHub Personal Access Token is invalid or expired.`;
+      }
       return {
         ok: false,
-        error:
-          errBody.message ||
-          `GitHub API error (${putRes.status}): Could not save ${fullPath}`,
+        error: `GitHub API (${putRes.status}): ${rawMsg}${hint}`,
       };
     }
 

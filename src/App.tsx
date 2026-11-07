@@ -40,14 +40,18 @@ const LOCAL_AMAZON_TAG_KEY = 'retunda_amazon_tag_v1';
 const LOCAL_GITHUB_CONFIG_KEY = 'retunda_github_config_v1';
 const SESSION_ADMIN_UNLOCKED_KEY = 'retunda_admin_unlocked_v1';
 const SESSION_GITHUB_PAT_KEY = 'retunda_session_gh_pat_v1';
+const SESSION_VAULT_SIG_KEY = 'retunda_vault_sig_v1';
 
 export function App() {
   const initialBundle = useMemo(() => loadInitialFlatFileBundle(), []);
 
-  // Admin Creator Gate state (locked by default for all public visitors)
+  // Admin Creator Gate state (locked by default, and re-prompts if ADMIN_VAULT changed)
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem(SESSION_ADMIN_UNLOCKED_KEY) === 'true';
+      const unlocked = sessionStorage.getItem(SESSION_ADMIN_UNLOCKED_KEY) === 'true';
+      const sig = sessionStorage.getItem(SESSION_VAULT_SIG_KEY);
+      const pat = sessionStorage.getItem(SESSION_GITHUB_PAT_KEY);
+      return unlocked && sig === initialBundle.config.adminVault && Boolean(pat);
     } catch {
       return false;
     }
@@ -62,18 +66,21 @@ export function App() {
   });
 
   const [githubConfig, setGithubConfig] = useState<GitHubRepoConfig>(() => {
+    const sessionPat = sessionStorage.getItem(SESSION_GITHUB_PAT_KEY) || '';
     try {
       const saved = localStorage.getItem(LOCAL_GITHUB_CONFIG_KEY);
-      const sessionPat = sessionStorage.getItem(SESSION_GITHUB_PAT_KEY) || '';
       if (saved) {
         const parsed = JSON.parse(saved) as GitHubRepoConfig;
         return {
-          owner: parsed.owner || initialBundle.config.githubOwner,
-          repo: parsed.repo || initialBundle.config.githubRepo,
-          branch: parsed.branch || initialBundle.config.githubBranch || 'main',
+          owner: initialBundle.config.githubOwner || parsed.owner || '',
+          repo: initialBundle.config.githubRepo || parsed.repo || '',
+          branch:
+            initialBundle.config.githubBranch ||
+            parsed.branch ||
+            'main',
           baseFolder:
-            parsed.baseFolder ||
             initialBundle.config.githubFolder ||
+            parsed.baseFolder ||
             'src/content/pages',
           token: sessionPat || parsed.token || '',
         };
@@ -86,7 +93,7 @@ export function App() {
       repo: initialBundle.config.githubRepo,
       branch: initialBundle.config.githubBranch || 'main',
       baseFolder: initialBundle.config.githubFolder || 'src/content/pages',
-      token: sessionStorage.getItem(SESSION_GITHUB_PAT_KEY) || '',
+      token: sessionPat,
     };
   });
 
@@ -238,6 +245,7 @@ export function App() {
   const handleUnlockSuccess = (decryptedGithubPat?: string) => {
     setIsAdminUnlocked(true);
     sessionStorage.setItem(SESSION_ADMIN_UNLOCKED_KEY, 'true');
+    sessionStorage.setItem(SESSION_VAULT_SIG_KEY, initialBundle.config.adminVault);
     if (decryptedGithubPat) {
       sessionStorage.setItem(SESSION_GITHUB_PAT_KEY, decryptedGithubPat);
       setGithubConfig((prev) => ({ ...prev, token: decryptedGithubPat }));
@@ -638,6 +646,7 @@ export function App() {
             onUpdateGithubConfig={handleUpdateGithubConfig}
             onSavePagePreview={handleSaveCustomPage}
             onOpenPage={openPageBySlug}
+            onRequestVaultUnlock={() => setShowPasscodeModal(true)}
           />
         )}
 
